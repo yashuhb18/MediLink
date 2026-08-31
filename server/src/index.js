@@ -56,6 +56,13 @@ app.post('/api/upload', async (req, res) => {
       return res.status(400).json({ error: "No image_data provided in payload" });
     }
 
+    // Read custom HTTP Headers sent by ESP32-CAM
+    const headerAction = req.headers['x-action'] || req.headers['action'] || req.body.action;
+    const headerMedicine = req.headers['x-medicine'] || req.headers['medicine'] || req.body.medicine;
+    const headerWeight = req.headers['x-quantity'] || req.headers['x-weight'] || req.body.quantityKg || req.body.weightKg;
+    const headerBatch = req.headers['x-batch'] || req.headers['batch'] || req.body.batch;
+    const headerHospital = req.headers['x-hospital-id'] || req.headers['hospital-id'] || req.body.hospitalId || 'H01';
+
     // 1. Save Image to MongoDB
     const newImage = new CapturedImage({
       image_data,
@@ -71,7 +78,23 @@ app.post('/api/upload', async (req, res) => {
     const qrResult = await decodeQRFromBuffer(imgBuffer);
 
     let scanResult = null;
-    if (qrResult && qrResult.found) {
+
+    if (headerAction && headerMedicine) {
+      // Header-driven action (Add / Remove directly via ESP32 headers!)
+      console.log(`[ESP32-CAM] 🏷️ Processing Action from HTTP Headers: Action=${headerAction}, Medicine=${headerMedicine}, Qty=${headerWeight || 1.0}`);
+      scanResult = await AutoScanner.processScan({
+        payload: {
+          action: headerAction.toUpperCase(),
+          medicine: headerMedicine,
+          weightKg: parseFloat(headerWeight) || 1.0,
+          batch: headerBatch || 'BATCH-ESP32',
+          destHospital: headerHospital,
+          sourceHospital: headerHospital
+        },
+        rawImageId: newImage._id,
+        imageBase64: image_data
+      });
+    } else if (qrResult && qrResult.found) {
       console.log(`[ESP32-CAM] 🎯 Optical QR Code Detected:`, qrResult.payload);
       scanResult = await AutoScanner.processScan({
         payload: qrResult.payload,
@@ -79,7 +102,7 @@ app.post('/api/upload', async (req, res) => {
         imageBase64: image_data
       });
     } else {
-      console.log(`[ESP32-CAM] No QR detected in frame. Storing raw capture.`);
+      console.log(`[ESP32-CAM] No QR/Action header detected. Storing raw capture.`);
       broadcastSSE({
         type: 'RAW_IMAGE_UPLOADED',
         imageId: newImage._id,
@@ -89,8 +112,9 @@ app.post('/api/upload', async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Image saved to MongoDB!",
+      message: "Image & action processed!",
       id: newImage._id,
+      headerActionDetected: !!headerAction,
       qrFound: qrResult ? qrResult.found : false,
       scanResult
     });

@@ -118,32 +118,42 @@ const AutoScanner = {
       }
 
       // ──────────────────────────────────────────
-      // 3. ACTION: RESTOCK_INFLOW
+      // 3. ACTION: ADD / RESTOCK_INFLOW
       // ──────────────────────────────────────────
-      else if (action === "RESTOCK_INFLOW" || action === "RESTOCK") {
+      else if (action === "ADD" || action === "ADDITION" || action === "RESTOCK" || action === "RESTOCK_INFLOW" || action === "INFLOW") {
         const destItems = await db.getInventoryForHospital(destHospital);
         const destItem = destItems.find(i => i.medicine.toLowerCase().includes(medicine.toLowerCase()));
         if (destItem) {
-          const newStock = +(destItem.currentStockKg + weightKg).toFixed(2);
+          const newStock = +(destItem.currentStockKg + parseFloat(weightKg)).toFixed(2);
           await db.updateInventoryItem(destItem.id, { currentStockKg: newStock });
           result.newStockKg = newStock;
-          result.message = `Restock complete: Added ${weightKg}kg of ${medicine} (Batch: ${batch}) to ${destHospital}. New Stock: ${newStock}kg.`;
+          result.message = `Successfully ADDED ${weightKg}kg of ${medicine} (Batch: ${batch}) to ${destHospital}. New Stock: ${newStock}kg.`;
         } else {
-          result.message = `New medicine batch recorded: ${medicine} (${weightKg}kg) batch ${batch}.`;
+          result.message = `New medicine batch recorded: ${medicine} (${weightKg}kg) batch ${batch} added to ${destHospital}.`;
+        }
+
+        if (db.addAuditLog) {
+          await db.addAuditLog("ITEM_ADDED", `ESP32-CAM Header Action: Added ${weightKg}kg of ${medicine} (Batch: ${batch})`, destHospital);
         }
       }
 
       // ──────────────────────────────────────────
-      // 4. ACTION: PHARMACY_DISPENSE
+      // 4. ACTION: REMOVE / DEDUCT / DISPENSE
       // ──────────────────────────────────────────
-      else if (action === "PHARMACY_DISPENSE" || action === "DISPENSE") {
+      else if (action === "REMOVE" || action === "REMOVAL" || action === "DEDUCT" || action === "DELETE" || action === "DISPENSE" || action === "PHARMACY_DISPENSE") {
         const srcItems = await db.getInventoryForHospital(sourceHospital);
         const matchItem = srcItems.find(i => i.medicine.toLowerCase().includes(medicine.toLowerCase()));
         if (matchItem) {
-          const newStock = Math.max(0, +(matchItem.currentStockKg - weightKg).toFixed(2));
+          const newStock = Math.max(0, +(matchItem.currentStockKg - parseFloat(weightKg)).toFixed(2));
           await db.updateInventoryItem(matchItem.id, { currentStockKg: newStock });
           result.newStockKg = newStock;
-          result.message = `Dispensed ${weightKg}kg of ${medicine} (Batch: ${batch}). Remaining: ${newStock}kg.`;
+          result.message = `Successfully REMOVED/DEDUCTED ${weightKg}kg of ${medicine} (Batch: ${batch}). Remaining Stock: ${newStock}kg.`;
+        } else {
+          result.message = `Deduction recorded for ${medicine} (${weightKg}kg) batch ${batch}.`;
+        }
+
+        if (db.addAuditLog) {
+          await db.addAuditLog("ITEM_REMOVED", `ESP32-CAM Header Action: Removed ${weightKg}kg of ${medicine} (Batch: ${batch})`, sourceHospital);
         }
       }
 
