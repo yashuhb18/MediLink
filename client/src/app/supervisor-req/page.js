@@ -227,6 +227,25 @@ export default function RequestingSupervisorPortal() {
               )}
             </div>
           )}
+
+          {/* SECTION: AI Predictions */}
+          {section === 'predictions' && (
+            <div className="card" style={{ marginBottom: '20px' }}>
+              <div className="card-header">
+                <h3><i className="fa-solid fa-brain" style={{ color: '#008b8b' }}></i> AI Time-Traveler Shortage Predictions</h3>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ borderColor: '#008b8b', color: '#008b8b', fontWeight: 700 }}
+                    onClick={() => { setLabelItem(null); setSmartLabelOpen(true); }}
+                  >
+                    <i className="fa-solid fa-qrcode"></i> Generate Smart Label (ESP32-CAM)
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => loadData(user.hospitalId)}>
+                    <i className="fa-solid fa-rotate"></i> Refresh
+                  </button>
+                </div>
+              </div>
               {predictions.length === 0 ? (
                 <div className="empty-state">
                   <i className="fa-solid fa-circle-check fa-2x" style={{ color: '#10b981' }}></i>
