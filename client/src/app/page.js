@@ -227,24 +227,18 @@ export default function UniversalLandingPage() {
     {
       src: '/patient-shortage-pain.jpg',
       alt: 'Patient Suffering from Medicine Shortage & Severe Migraine',
-      tag: 'Critical Medicine Shortage Problem',
+      tag: 'Critical Medicine Shortage Crisis',
       icon: 'fa-triangle-exclamation'
     },
     {
       src: '/hero-1-pharmacy.jpg',
-      alt: 'Automated Pharmacy Inventory & Medicine Stock',
-      tag: 'Automated Pharmacy Inventory',
+      alt: 'Indian Medical Store Pharmacist Dispensing Stock',
+      tag: 'Indian Medical Store Dispensing',
       icon: 'fa-pills'
     },
     {
-      src: '/patient-shortage-crisis.jpg',
-      alt: 'Hospital ICU Patient Facing Supply Stockout',
-      tag: 'Zero-Stockout Emergency Lifeline',
-      icon: 'fa-heart-pulse'
-    },
-    {
       src: '/hero-2-doctor.jpg',
-      alt: 'Hospital Network Command & Patient Telemetry',
+      alt: 'Indian Hospital Command Center & Doctor Telemetry',
       tag: 'Hospital Network Command',
       icon: 'fa-user-doctor'
     },
