@@ -79,4 +79,26 @@ router.get('/images', async (req, res) => {
   }
 });
 
+// POST /api/iot/execute-action — 1-click execution for Add, Remove, Restock, Dispense
+router.post('/execute-action', async (req, res) => {
+  try {
+    const { action, medicine, weightKg, batch, hospitalId, imageId } = req.body;
+    const AutoScanner = require('../modules/auto_scanner');
+    const result = await AutoScanner.processScan({
+      payload: {
+        action: (action || 'ADD').toUpperCase(),
+        medicine: medicine || 'Paracetamol 500mg',
+        weightKg: parseFloat(weightKg) || 1.0,
+        batch: batch || 'BATCH-01',
+        destHospital: hospitalId || 'H01',
+        sourceHospital: hospitalId || 'H01'
+      },
+      rawImageId: imageId || null
+    });
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -82,7 +82,8 @@ export const aiApi = {
 };
 
 export const cameraApi = {
-  getLatestImages: () => apiFetch('/upload/latest')
+  getLatestImages: () => apiFetch('/upload/latest'),
+  executeAction: (data) => apiFetch('/iot/execute-action', { method: 'POST', body: JSON.stringify(data) })
 };
 
 

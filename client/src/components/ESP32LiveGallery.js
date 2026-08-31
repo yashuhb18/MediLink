@@ -6,6 +6,11 @@ export default function ESP32LiveGallery() {
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedImg, setSelectedImg] = useState(null);
+  const [activeActionId, setActiveActionId] = useState(null);
+  const [selectedMed, setSelectedMed] = useState('Paracetamol');
+  const [selectedQty, setSelectedQty] = useState('1.0');
+  const [executing, setExecuting] = useState(false);
+  const [toastMsg, setToastMsg] = useState(null);
 
   const loadImages = async () => {
     setLoading(true);
@@ -23,15 +28,60 @@ export default function ESP32LiveGallery() {
 
   useEffect(() => {
     loadImages();
-
-    // Listen for live SSE updates
     const handleUpdate = () => loadImages();
     window.addEventListener('medilink_data_updated', handleUpdate);
     return () => window.removeEventListener('medilink_data_updated', handleUpdate);
   }, []);
 
+  const handleExecute = async (actionType, imageId) => {
+    setExecuting(true);
+    try {
+      const res = await cameraApi.executeAction({
+        action: actionType,
+        medicine: selectedMed,
+        weightKg: parseFloat(selectedQty) || 1.0,
+        batch: 'BATCH-ESP32',
+        hospitalId: 'H01',
+        imageId
+      });
+
+      if (res.success) {
+        setToastMsg(`✅ Success: ${res.result.message}`);
+        setActiveActionId(null);
+        // Trigger global data refresh
+        window.dispatchEvent(new CustomEvent('medilink_data_updated'));
+        setTimeout(() => setToastMsg(null), 5000);
+      }
+    } catch (err) {
+      setToastMsg(`⚠️ Action failed: ${err.message}`);
+      setTimeout(() => setToastMsg(null), 5000);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
   return (
     <div className="card" style={{ marginBottom: '24px', border: '1.5px solid #008b8b' }}>
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div style={{
+          marginBottom: '16px',
+          padding: '12px 18px',
+          background: 'linear-gradient(135deg, #008b8b 0%, #006666 100%)',
+          color: '#ffffff',
+          borderRadius: '12px',
+          fontWeight: 700,
+          fontSize: '0.88rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 8px 20px rgba(0, 139, 139, 0.3)'
+        }}>
+          <span>{toastMsg}</span>
+          <button onClick={() => setToastMsg(null)} style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="card-header" style={{ flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -50,11 +100,11 @@ export default function ESP32LiveGallery() {
           </div>
           <div>
             <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
-              ESP32-CAM Hardware Live Capture Feed
+              ESP32-CAM Hardware Live Capture Feed & Action Console
             </h3>
             <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span className="pulse-dot-teal" style={{ width: '6px', height: '6px' }}></span>
-              <span>Optical Vision Terminal Bridge · Real-time Photos Saved in MongoDB Atlas</span>
+              <span>Optical Vision Terminal · Select Add / Remove Options on Live Frames</span>
             </div>
           </div>
         </div>
@@ -84,8 +134,8 @@ export default function ESP32LiveGallery() {
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: '14px',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+          gap: '16px',
           padding: '4px'
         }}>
           {images.map((img, idx) => {
@@ -94,17 +144,19 @@ export default function ESP32LiveGallery() {
               ? img.image_data
               : `data:image/jpeg;base64,${img.image_data}`;
 
+            const isActionOpen = activeActionId === img._id;
+
             return (
               <div
                 key={img._id || idx}
                 style={{
-                  borderRadius: '14px',
-                  backgroundColor: '#f8fafc',
+                  borderRadius: '16px',
+                  backgroundColor: '#ffffff',
                   border: idx === 0 ? '2px solid #008b8b' : '1px solid #e2e8f0',
                   overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column',
-                  boxShadow: idx === 0 ? '0 8px 20px rgba(0, 139, 139, 0.15)' : 'none',
+                  boxShadow: idx === 0 ? '0 10px 25px rgba(0, 139, 139, 0.15)' : '0 2px 8px rgba(0,0,0,0.04)',
                   position: 'relative'
                 }}
               >
@@ -114,11 +166,11 @@ export default function ESP32LiveGallery() {
                     top: '8px',
                     left: '8px',
                     zIndex: 2,
-                    padding: '2px 8px',
+                    padding: '3px 10px',
                     borderRadius: '999px',
                     backgroundColor: '#008b8b',
                     color: '#ffffff',
-                    fontSize: '0.65rem',
+                    fontSize: '0.68rem',
                     fontWeight: 800,
                     letterSpacing: '0.04em'
                   }}>
@@ -130,7 +182,7 @@ export default function ESP32LiveGallery() {
                 <div
                   onClick={() => setSelectedImg(imgSrc)}
                   style={{
-                    height: '140px',
+                    height: '160px',
                     backgroundColor: '#0f172a',
                     display: 'flex',
                     alignItems: 'center',
@@ -168,17 +220,138 @@ export default function ESP32LiveGallery() {
                 </div>
 
                 {/* Metadata Details */}
-                <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#1e293b', display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>{img.source || 'ESP32-CAM'}</span>
-                    <span style={{ color: '#10b981', fontWeight: 800 }}>● VERIFIED</span>
+                    <span style={{ color: '#10b981', fontWeight: 800, fontSize: '0.72rem', background: '#ecfdf5', padding: '2px 8px', borderRadius: '999px' }}>
+                      ● RECEIVED
+                    </span>
                   </div>
-                  <div style={{ fontSize: '0.68rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
+
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
                     {new Date(img.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} · {new Date(img.createdAt).toLocaleDateString()}
                   </div>
-                  <div style={{ fontSize: '0.65rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    ID: {img._id}
-                  </div>
+
+                  {/* Quick Action Options Toggle */}
+                  <button
+                    onClick={() => setActiveActionId(isActionOpen ? null : img._id)}
+                    style={{
+                      marginTop: '6px',
+                      padding: '7px 12px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #008b8b',
+                      background: isActionOpen ? '#e6f7f6' : '#ffffff',
+                      color: '#008b8b',
+                      fontWeight: 700,
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <i className="fa-solid fa-sliders"></i>
+                    {isActionOpen ? 'Hide Options' : '⚡ Action Options (Add / Remove)'}
+                  </button>
+
+                  {/* Interactive Action Options Console */}
+                  {isActionOpen && (
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '12px',
+                      backgroundColor: '#f0fdfa',
+                      borderRadius: '10px',
+                      border: '1px solid #99f6e4',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div>
+                        <label style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0f766e', display: 'block', marginBottom: '2px' }}>
+                          Medicine Item:
+                        </label>
+                        <select
+                          value={selectedMed}
+                          onChange={(e) => setSelectedMed(e.target.value)}
+                          style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem', fontWeight: 600 }}
+                        >
+                          <option value="Paracetamol">Paracetamol 500mg</option>
+                          <option value="Amoxicillin 500mg">Amoxicillin 500mg</option>
+                          <option value="Insulin Glargine">Insulin Glargine</option>
+                          <option value="Azithromycin 250mg">Azithromycin 250mg</option>
+                          <option value="Metformin 500mg">Metformin 500mg</option>
+                          <option value="Dollo 650mg">Dollo 650mg</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0f766e', display: 'block', marginBottom: '2px' }}>
+                          Quantity (Kg):
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={selectedQty}
+                          onChange={(e) => setSelectedQty(e.target.value)}
+                          style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem', fontWeight: 700 }}
+                        />
+                      </div>
+
+                      {/* 1-Click Action Buttons */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '4px' }}>
+                        <button
+                          onClick={() => handleExecute('ADD', img._id)}
+                          disabled={executing}
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            backgroundColor: '#10b981',
+                            color: '#ffffff',
+                            fontWeight: 700,
+                            fontSize: '0.74rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ➕ Add Stock
+                        </button>
+                        <button
+                          onClick={() => handleExecute('REMOVE', img._id)}
+                          disabled={executing}
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            backgroundColor: '#ef4444',
+                            color: '#ffffff',
+                            fontWeight: 700,
+                            fontSize: '0.74rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ➖ Remove Stock
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => handleExecute('TRANSFER_DISPATCH', img._id)}
+                        disabled={executing}
+                        style={{
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          backgroundColor: '#008b8b',
+                          color: '#ffffff',
+                          fontWeight: 700,
+                          fontSize: '0.74rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📦 Dispatch Active Requisition
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
