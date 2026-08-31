@@ -254,6 +254,35 @@ const db = {
     }
   },
 
+  async createInventoryItem(data) {
+    const newItem = {
+      id: data.id || `INV-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+      hospitalId: data.hospitalId || 'H01',
+      medicine: data.medicine,
+      currentStockKg: parseFloat(data.currentStockKg) || 1.0,
+      minThresholdKg: parseFloat(data.minThresholdKg) || 1.0,
+      consumptionRatePerHour: 0.05,
+      batch: data.batch || 'BATCH-01',
+      expiryDate: data.expiryDate || new Date(Date.now() + 365*86400000).toISOString().split('T')[0],
+      rfidUid: data.rfidUid || `TAG-${Math.floor(Math.random()*9000+1000)}`,
+      boxId: data.boxId || 'BOX-A1',
+      shelfPosition: data.shelfPosition || 'Shelf 1A',
+      sensorHygiene: 'OK',
+      locked: false,
+      lastSyncTime: new Date().toISOString()
+    };
+    if (this.mode === 'mongodb' || this.mode === 'atlas') {
+      const created = await Inventory.create(newItem);
+      return toPlain(created);
+    }
+    if (this.mode === 'memory') {
+      memoryDb.inventory.push(newItem);
+      return newItem;
+    }
+    await firestoreDb.collection('inventory').doc(newItem.id).set(newItem);
+    return newItem;
+  },
+
   async getInventoryItem(id) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
       try {

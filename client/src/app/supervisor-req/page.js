@@ -4,11 +4,13 @@ import Sidebar from '@/components/Sidebar';
 import PortalHeader from '@/components/PortalHeader';
 import StatusPipeline from '@/components/StatusPipeline';
 import SmartLabelModal from '@/components/SmartLabelModal';
+import ESP32LiveGallery from '@/components/ESP32LiveGallery';
 import { inventoryApi, transferApi, karmaApi } from '@/lib/api';
 
 export default function RequestingSupervisorPortal() {
   const [user, setUser] = useState(null);
-  const [section, setSection] = useState('predictions');
+  const [section, setSection] = useState('inventory');
+  const [inventoryList, setInventoryList] = useState([]);
   const [predictions, setPredictions] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
   const [karmaData, setKarmaData] = useState({ score: 50 });
@@ -28,10 +30,15 @@ export default function RequestingSupervisorPortal() {
     if (u.role !== 'REQUESTING_SUPERVISOR') { window.location.href = '/'; return; }
     setUser(u);
     loadData(u.hospitalId);
+
+    const handleUpdate = () => loadData(u.hospitalId);
+    window.addEventListener('medilink_data_updated', handleUpdate);
+    return () => window.removeEventListener('medilink_data_updated', handleUpdate);
   }, []);
 
   const loadData = async (hId) => {
     try {
+      const inv = await inventoryApi.getInventory(hId); setInventoryList(inv || []);
       const preds = await inventoryApi.getPredictions(hId); setPredictions(preds);
       const reqs = await transferApi.getTransfers(hId, 'REQUESTING_SUPERVISOR'); setOutgoingRequests(reqs);
       const k = await karmaApi.getScore(hId); setKarmaData(k);
@@ -109,8 +116,14 @@ export default function RequestingSupervisorPortal() {
             </div>
           </div>
 
+          {/* Live Camera Feed & Action Console */}
+          <ESP32LiveGallery />
+
           {/* Tabs */}
           <div className="tab-nav">
+            <button className={`tab-btn ${section === 'inventory' ? 'active' : ''}`} onClick={() => setSection('inventory')}>
+              <i className="fa-solid fa-boxes-stacked"></i> Hospital Inventory ({inventoryList.length})
+            </button>
             <button className={`tab-btn ${section === 'predictions' ? 'active' : ''}`} onClick={() => setSection('predictions')}>
               <i className="fa-solid fa-brain"></i> AI Predictions ({predictions.length})
             </button>
@@ -122,22 +135,98 @@ export default function RequestingSupervisorPortal() {
             </button>
           </div>
 
-          {/* Predictions (Shown on dashboard and predictions) */}
-          {(section === 'dashboard' || section === 'predictions') && (
+          {/* SECTION: Hospital Inventory Table */}
+          {section === 'inventory' && (
             <div className="card" style={{ marginBottom: '20px' }}>
               <div className="card-header">
-                <h3><i className="fa-solid fa-brain" style={{ color: '#008b8b' }}></i> AI Time-Traveler Shortage Predictions</h3>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>
+                    <i className="fa-solid fa-boxes-stacked" style={{ color: '#008b8b' }}></i> Node {user.hospitalId} Live Medicine Inventory
+                  </h3>
+                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '2px' }}>
+                    All local hospital medicines including items added via ESP32-CAM scanner & cloud sync.
+                  </div>
+                </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
                     className="btn btn-ghost btn-sm"
                     style={{ borderColor: '#008b8b', color: '#008b8b', fontWeight: 700 }}
                     onClick={() => { setLabelItem(null); setSmartLabelOpen(true); }}
                   >
-                    <i className="fa-solid fa-qrcode"></i> Generate Smart Label (ESP32-CAM)
+                    <i className="fa-solid fa-qrcode"></i> Generate Smart Label
                   </button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => loadData(user.hospitalId)}><i className="fa-solid fa-rotate"></i> Refresh</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => loadData(user.hospitalId)}>
+                    <i className="fa-solid fa-rotate"></i> Refresh
+                  </button>
                 </div>
               </div>
+
+              {inventoryList.length === 0 ? (
+                <div className="empty-state">
+                  <i className="fa-solid fa-box-open fa-2x" style={{ color: '#94a3b8' }}></i>
+                  <p style={{ fontWeight: 600, marginTop: '8px' }}>No medicines found in hospital inventory.</p>
+                </div>
+              ) : (
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Medicine Name</th>
+                        <th>Current Stock</th>
+                        <th>Batch Number</th>
+                        <th>Shelf Location</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inventoryList.map(item => {
+                        const isLow = item.currentStockKg < (item.minThresholdKg || 1.0);
+                        return (
+                          <tr key={item.id || item._id}>
+                            <td>
+                              <div style={{ fontWeight: 800, color: '#0f172a' }}>{item.medicine}</div>
+                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>ID: {item.id}</div>
+                            </td>
+                            <td>
+                              <span style={{
+                                fontWeight: 800,
+                                fontSize: '0.95rem',
+                                color: isLow ? '#ef4444' : '#008b8b',
+                                fontFamily: 'var(--font-mono)'
+                              }}>
+                                {parseFloat(item.currentStockKg).toFixed(2)} kg
+                              </span>
+                            </td>
+                            <td>
+                              <span style={{ fontSize: '0.78rem', fontFamily: 'var(--font-mono)', background: '#f1f5f9', padding: '3px 8px', borderRadius: '6px' }}>
+                                {item.batch || 'N/A'}
+                              </span>
+                            </td>
+                            <td>{item.shelfPosition || 'Shelf 1A'}</td>
+                            <td>
+                              <span className={`badge ${isLow ? 'badge-danger' : 'badge-success'}`}>
+                                {isLow ? '⚠️ LOW STOCK' : '● IN STOCK'}
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ fontSize: '0.72rem', fontWeight: 700 }}
+                                onClick={() => { setLabelItem(item); setSmartLabelOpen(true); }}
+                              >
+                                <i className="fa-solid fa-qrcode"></i> Label
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
               {predictions.length === 0 ? (
                 <div className="empty-state">
                   <i className="fa-solid fa-circle-check fa-2x" style={{ color: '#10b981' }}></i>

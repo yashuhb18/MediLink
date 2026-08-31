@@ -122,14 +122,26 @@ const AutoScanner = {
       // ──────────────────────────────────────────
       else if (action === "ADD" || action === "ADDITION" || action === "RESTOCK" || action === "RESTOCK_INFLOW" || action === "INFLOW") {
         const destItems = await db.getInventoryForHospital(destHospital);
-        const destItem = destItems.find(i => i.medicine.toLowerCase().includes(medicine.toLowerCase()));
+        const destItem = destItems.find(i => 
+          i.medicine.toLowerCase().includes(medicine.toLowerCase()) || 
+          medicine.toLowerCase().includes(i.medicine.toLowerCase())
+        );
         if (destItem) {
           const newStock = +(destItem.currentStockKg + parseFloat(weightKg)).toFixed(2);
           await db.updateInventoryItem(destItem.id, { currentStockKg: newStock });
           result.newStockKg = newStock;
-          result.message = `Successfully ADDED ${weightKg}kg of ${medicine} (Batch: ${batch}) to ${destHospital}. New Stock: ${newStock}kg.`;
+          result.message = `Successfully ADDED ${weightKg}kg to existing ${destItem.medicine} (Batch: ${batch}) at ${destHospital}. New Stock: ${newStock}kg.`;
         } else {
-          result.message = `New medicine batch recorded: ${medicine} (${weightKg}kg) batch ${batch} added to ${destHospital}.`;
+          // Create new medicine entry in MongoDB!
+          const created = await db.createInventoryItem({
+            hospitalId: destHospital,
+            medicine: medicine,
+            currentStockKg: parseFloat(weightKg),
+            batch: batch || 'BATCH-ESP32',
+            minThresholdKg: 1.0
+          });
+          result.newStockKg = parseFloat(weightKg);
+          result.message = `New medicine successfully created in inventory: ${medicine} (${weightKg}kg, Batch: ${batch}) at ${destHospital}.`;
         }
 
         if (db.addAuditLog) {
