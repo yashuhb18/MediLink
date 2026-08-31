@@ -9,7 +9,7 @@ const OLLAMA_PORT = process.env.OLLAMA_PORT || 11434;
 const GLM_MODEL = process.env.GLM_MODEL || 'glm4';
 
 /**
- * Call local Ollama GLM model with /api/chat
+ * Call local Ollama GLM model with fast num_predict & keep_alive
  */
 function callLocalGLM(prompt, systemPrompt = '') {
   return new Promise((resolve, reject) => {
@@ -26,9 +26,11 @@ function callLocalGLM(prompt, systemPrompt = '') {
         }
       ],
       stream: false,
+      keep_alive: "15m", // Keep model warm in RAM/VRAM
       options: {
-        temperature: 0.3,
-        num_predict: 250
+        temperature: 0.2,
+        num_predict: 120, // Fast response in 2-4 seconds
+        top_p: 0.85
       }
     });
 
@@ -41,7 +43,7 @@ function callLocalGLM(prompt, systemPrompt = '') {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload)
       },
-      timeout: 45000
+      timeout: 30000
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
@@ -64,7 +66,7 @@ function callLocalGLM(prompt, systemPrompt = '') {
     req.on('error', (err) => reject(err));
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('GLM inference timed out (45s)'));
+      reject(new Error('GLM inference timed out (30s)'));
     });
 
     req.write(payload);
@@ -165,26 +167,22 @@ Instructions:
    * Deep GLM-4 Analysis for specific prediction
    */
   async explainPrediction(prediction) {
-    const prompt = `Analyze this medicine shortage risk and recommend a clinical action plan:
+    const prompt = `Provide a concise 2-sentence clinical assessment for this shortage:
 Medicine: ${prediction.medicine} (Batch ${prediction.batch})
-Current Stock: ${prediction.currentStockKg} kg (Minimum Threshold: ${prediction.minThresholdKg} kg)
-Consumption Rate: ${prediction.consumptionRate} kg/hr
-Estimated Time to Complete Zero Stock: ${prediction.hoursToZero} hours
-Estimated Deficit: ${prediction.deficitKg} kg
-Urgency Level: ${prediction.urgency}
-
-Provide a brief 3-point clinical assessment (Root Cause, Patient Impact, Recommended Transfer Source).`;
+Current Stock: ${prediction.currentStockKg}kg vs Min: ${prediction.minThresholdKg}kg
+Rate: ${prediction.consumptionRate} kg/hr | Hours Left: ${prediction.hoursToZero}h | Deficit: ${prediction.deficitKg}kg | Urgency: ${prediction.urgency}
+State the shortage cause and recommended inter-hospital sourcing action.`;
 
     try {
-      const response = await callLocalGLM(prompt, "You are a Chief Clinical Pharmacologist AI analyzing inter-hospital supply chain data.");
+      const response = await callLocalGLM(prompt, "You are a Chief Clinical Pharmacologist AI for MediLink.");
       return {
         explanation: response.trim(),
-        model: 'GLM-4 Local',
+        model: 'GLM-4 Local (Ollama)',
         isLiveLLM: true
       };
     } catch (err) {
       return {
-        explanation: `Clinical Assessment: ${prediction.medicine} is depleting at a rate of ${prediction.consumptionRate} kg/hr. With ${prediction.currentStockKg} kg remaining, the hospital will experience a stockout in approximately ${prediction.hoursToZero} hours. Sourcing ${prediction.deficitKg} kg from the nearest available hospital node is recommended to prevent critical care disruption.`,
+        explanation: `Clinical Assessment: ${prediction.medicine} is consuming at ${prediction.consumptionRate} kg/hr with only ${prediction.currentStockKg} kg left (${prediction.hoursToZero}h to stockout). Recommended action: initiate emergency Nash transfer for ${prediction.deficitKg} kg from nearest regional hospital.`,
         model: 'Rule Engine Fallback',
         isLiveLLM: false
       };

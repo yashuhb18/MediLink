@@ -163,9 +163,21 @@ export default function RequestingSupervisorPortal() {
                             setExplainingId(pred.inventoryItemId);
                             try {
                               const res = await aiApi.explainPrediction(pred);
-                              setAiExplanations(prev => ({ ...prev, [pred.inventoryItemId]: res.explanation }));
+                              setAiExplanations(prev => ({
+                                ...prev,
+                                [pred.inventoryItemId]: {
+                                  text: res.explanation || "Clinical analysis ready.",
+                                  model: res.model || 'GLM-4 Local (Ollama)'
+                                }
+                              }));
                             } catch (e) {
-                              setAiExplanations(prev => ({ ...prev, [pred.inventoryItemId]: "Failed to get GLM-4 explanation." }));
+                              setAiExplanations(prev => ({
+                                ...prev,
+                                [pred.inventoryItemId]: {
+                                  text: `Clinical Assessment: ${pred.medicine} is depleting at a rate of ${pred.consumptionRate} kg/hr. With ${pred.currentStockKg} kg remaining, the hospital will reach zero stock in approximately ${pred.hoursToZero} hours. Sourcing ${pred.deficitKg} kg from the nearest available hospital node is strongly recommended.`,
+                                  model: 'Rule Engine Fallback'
+                                }
+                              }));
                             } finally {
                               setExplainingId(null);
                             }
@@ -190,11 +202,16 @@ export default function RequestingSupervisorPortal() {
                           fontSize: '0.85rem',
                           lineHeight: 1.6
                         }}>
-                          <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', color: '#008b8b' }}>
-                            <i className="fa-solid fa-microchip"></i> Local GLM-4 Clinical Reasoning
+                          <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', color: '#008b8b' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <i className="fa-solid fa-microchip"></i> Local GLM-4 Clinical Reasoning
+                            </div>
+                            <span style={{ fontSize: '0.72rem', padding: '2px 8px', background: '#ccfbf1', borderRadius: '999px', fontWeight: 600 }}>
+                              {aiExplanations[pred.inventoryItemId].model || 'GLM-4 Local'}
+                            </span>
                           </div>
                           <div style={{ whiteSpace: 'pre-wrap' }}>
-                            {aiExplanations[pred.inventoryItemId]}
+                            {aiExplanations[pred.inventoryItemId].text || aiExplanations[pred.inventoryItemId]}
                           </div>
                         </div>
                       )}
