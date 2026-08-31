@@ -79,8 +79,27 @@ app.post('/api/upload', async (req, res) => {
 
     let scanResult = null;
 
-    if (headerAction && headerMedicine) {
-      // Header-driven action (Add / Remove directly via ESP32 headers!)
+    if (qrResult && qrResult.found && qrResult.payload) {
+      // 🎯 DYNAMIC: Real Medicine & Batch extracted from the scanned QR code!
+      console.log(`[ESP32-CAM] 🎯 Optical QR Code Detected from Image:`, qrResult.payload);
+      
+      // If the ESP32 OLED sent a specific action (ADD or REMOVE), use it; otherwise use the QR action
+      const resolvedAction = (headerAction && headerAction !== 'AUTO') 
+        ? headerAction.toUpperCase() 
+        : (qrResult.payload.action || 'TRANSFER_DISPATCH');
+
+      scanResult = await AutoScanner.processScan({
+        payload: {
+          ...qrResult.payload,
+          action: resolvedAction,
+          destHospital: headerHospital,
+          sourceHospital: headerHospital
+        },
+        rawImageId: newImage._id,
+        imageBase64: image_data
+      });
+    } else if (headerAction && headerMedicine && headerMedicine !== 'QR_Scan_Pending') {
+      // Fallback: If no QR in frame, use header medicine
       console.log(`[ESP32-CAM] 🏷️ Processing Action from HTTP Headers: Action=${headerAction}, Medicine=${headerMedicine}, Qty=${headerWeight || 1.0}`);
       scanResult = await AutoScanner.processScan({
         payload: {
@@ -94,15 +113,8 @@ app.post('/api/upload', async (req, res) => {
         rawImageId: newImage._id,
         imageBase64: image_data
       });
-    } else if (qrResult && qrResult.found) {
-      console.log(`[ESP32-CAM] 🎯 Optical QR Code Detected:`, qrResult.payload);
-      scanResult = await AutoScanner.processScan({
-        payload: qrResult.payload,
-        rawImageId: newImage._id,
-        imageBase64: image_data
-      });
     } else {
-      console.log(`[ESP32-CAM] No QR/Action header detected. Storing raw capture.`);
+      console.log(`[ESP32-CAM] Image stored. Waiting for QR scan or action selection.`);
       broadcastSSE({
         type: 'RAW_IMAGE_UPLOADED',
         imageId: newImage._id,
