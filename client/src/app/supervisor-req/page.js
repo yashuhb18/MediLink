@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import PortalHeader from '@/components/PortalHeader';
 import StatusPipeline from '@/components/StatusPipeline';
+import SmartLabelModal from '@/components/SmartLabelModal';
 import { inventoryApi, transferApi, karmaApi } from '@/lib/api';
 
 export default function RequestingSupervisorPortal() {
@@ -17,6 +18,8 @@ export default function RequestingSupervisorPortal() {
   const [manualNotes, setManualNotes] = useState('');
   const [aiExplanations, setAiExplanations] = useState({});
   const [explainingId, setExplainingId] = useState(null);
+  const [smartLabelOpen, setSmartLabelOpen] = useState(false);
+  const [labelItem, setLabelItem] = useState(null);
 
   useEffect(() => {
     const userStr = localStorage.getItem('medilink_user');
@@ -124,7 +127,16 @@ export default function RequestingSupervisorPortal() {
             <div className="card" style={{ marginBottom: '20px' }}>
               <div className="card-header">
                 <h3><i className="fa-solid fa-brain" style={{ color: '#008b8b' }}></i> AI Time-Traveler Shortage Predictions</h3>
-                <button className="btn btn-ghost btn-sm" onClick={() => loadData(user.hospitalId)}><i className="fa-solid fa-rotate"></i> Refresh</button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ borderColor: '#008b8b', color: '#008b8b', fontWeight: 700 }}
+                    onClick={() => { setLabelItem(null); setSmartLabelOpen(true); }}
+                  >
+                    <i className="fa-solid fa-qrcode"></i> Generate Smart Label (ESP32-CAM)
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => loadData(user.hospitalId)}><i className="fa-solid fa-rotate"></i> Refresh</button>
+                </div>
               </div>
               {predictions.length === 0 ? (
                 <div className="empty-state">
@@ -286,6 +298,13 @@ export default function RequestingSupervisorPortal() {
           )}
         </div>
       </div>
+
+      {/* Smart Optical QR Generator Modal */}
+      <SmartLabelModal
+        isOpen={smartLabelOpen}
+        onClose={() => setSmartLabelOpen(false)}
+        defaultItem={labelItem}
+      />
     </div>
   );
 }

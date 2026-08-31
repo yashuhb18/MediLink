@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import PortalHeader from '@/components/PortalHeader';
 import KarmaGauge from '@/components/KarmaGauge';
+import SmartLabelModal from '@/components/SmartLabelModal';
 import { transferApi, karmaApi } from '@/lib/api';
 
 export default function SourceSupervisorPortal() {
@@ -13,6 +14,8 @@ export default function SourceSupervisorPortal() {
   const [rejectingReq, setRejectingReq] = useState(null);
   const [rejectReason, setRejectReason] = useState('Needed for upcoming local surgeries');
   const [customReason, setCustomReason] = useState('');
+  const [smartLabelOpen, setSmartLabelOpen] = useState(false);
+  const [labelItem, setLabelItem] = useState(null);
 
   useEffect(() => {
     const userStr = localStorage.getItem('medilink_user');
@@ -103,6 +106,13 @@ export default function SourceSupervisorPortal() {
                   <h3><i className="fa-solid fa-inbox" style={{ color: '#008b8b' }}></i> Incoming Request Queue</h3>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span className="badge badge-teal">{incomingRequests.length} Total</span>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ borderColor: '#008b8b', color: '#008b8b', fontWeight: 700 }}
+                      onClick={() => { setLabelItem(null); setSmartLabelOpen(true); }}
+                    >
+                      <i className="fa-solid fa-qrcode"></i> Generate Smart Label (ESP32-CAM)
+                    </button>
                     <button className="btn btn-ghost btn-sm" onClick={() => loadData(user.hospitalId)}>
                       <i className="fa-solid fa-rotate"></i> Refresh
                     </button>
@@ -246,6 +256,13 @@ export default function SourceSupervisorPortal() {
           </div>
         </div>
       )}
+
+      {/* Smart Optical QR Generator Modal */}
+      <SmartLabelModal
+        isOpen={smartLabelOpen}
+        onClose={() => setSmartLabelOpen(false)}
+        defaultItem={labelItem}
+      />
     </div>
   );
 }

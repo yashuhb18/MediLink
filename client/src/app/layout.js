@@ -1,5 +1,6 @@
 import "./globals.css";
 import MediBotChat from "@/components/MediBotChat";
+import LiveCameraScanModal from "@/components/LiveCameraScanModal";
 
 export const metadata = {
   title: "MediLink AI — Intelligent Medicine Redistribution Network",
@@ -27,6 +28,7 @@ export default function RootLayout({ children }) {
       <body>
         {children}
         <MediBotChat />
+        <LiveCameraScanModal />
       </body>
     </html>
   );

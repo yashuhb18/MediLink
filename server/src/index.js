@@ -22,9 +22,14 @@ app.use('/api/karma', require('./routes/karma.routes'));
 app.use('/api/admin', require('./routes/admin.routes'));
 app.use('/api/iot', require('./routes/iot.routes'));
 app.use('/api/ai', require('./routes/ai.routes'));
+app.use('/api/events', require('./routes/events.routes').router);
 
-// Direct ESP32 Upload Endpoint Alias
+// Direct ESP32 Upload Endpoint Alias & Vision Engine
 const CapturedImage = require('./models/CapturedImage');
+const { decodeQRFromBuffer } = require('./modules/qr_decoder');
+const AutoScanner = require('./modules/auto_scanner');
+const { broadcastSSE } = require('./routes/events.routes');
+
 app.get('/api/upload', (req, res) => {
   res.json({
     status: "online",
@@ -34,12 +39,15 @@ app.get('/api/upload', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
 app.post('/api/upload', async (req, res) => {
   try {
     const { image_data, source, requestId, inventoryItemId } = req.body;
     if (!image_data) {
       return res.status(400).json({ error: "No image_data provided in payload" });
     }
+
+    // 1. Save Image to MongoDB
     const newImage = new CapturedImage({
       image_data,
       source: source || "ESP32-CAM",
@@ -48,7 +56,35 @@ app.post('/api/upload', async (req, res) => {
     });
     await newImage.save();
     console.log(`[ESP32-CAM] Image saved successfully to MongoDB at ${new Date().toISOString()}`);
-    return res.status(200).json({ success: true, message: "Image saved to MongoDB!", id: newImage._id });
+
+    // 2. Optical QR/Barcode Auto-Decoding
+    const imgBuffer = Buffer.from(image_data, 'base64');
+    const qrResult = await decodeQRFromBuffer(imgBuffer);
+
+    let scanResult = null;
+    if (qrResult && qrResult.found) {
+      console.log(`[ESP32-CAM] 🎯 Optical QR Code Detected:`, qrResult.payload);
+      scanResult = await AutoScanner.processScan({
+        payload: qrResult.payload,
+        rawImageId: newImage._id,
+        imageBase64: image_data
+      });
+    } else {
+      console.log(`[ESP32-CAM] No QR detected in frame. Storing raw capture.`);
+      broadcastSSE({
+        type: 'RAW_IMAGE_UPLOADED',
+        imageId: newImage._id,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Image saved to MongoDB!",
+      id: newImage._id,
+      qrFound: qrResult ? qrResult.found : false,
+      scanResult
+    });
   } catch (error) {
     console.error("[ESP32-CAM] Upload error:", error);
     return res.status(500).json({ error: "Internal Server Error" });

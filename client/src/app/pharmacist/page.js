@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar';
 import PortalHeader from '@/components/PortalHeader';
 import TrafficLight from '@/components/TrafficLight';
 import IoTSimulator from '@/components/IoTSimulator';
+import SmartLabelModal from '@/components/SmartLabelModal';
 import { transferApi } from '@/lib/api';
 
 export default function PharmacistPortal() {
@@ -16,6 +17,7 @@ export default function PharmacistPortal() {
   const [statusMsg, setStatusMsg] = useState('AWAITING TASK');
   const [detailMsg, setDetailMsg] = useState('No active picklist assigned.');
   const [verifying, setVerifying] = useState(false);
+  const [smartLabelOpen, setSmartLabelOpen] = useState(false);
 
   useEffect(() => {
     const userStr = localStorage.getItem('medilink_user');
@@ -143,10 +145,19 @@ export default function PharmacistPortal() {
             <div>
               {activeReq ? (
                 <div className="card" style={{ borderColor: '#008b8b', marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-divider)', paddingBottom: '14px', marginBottom: '16px' }}>
-                    <span className="badge badge-warning" style={{ fontSize: '0.78rem', padding: '5px 14px' }}>
-                      <i className="fa-solid fa-clipboard-list"></i> Active Picklist — {activeReq.id}
-                    </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-divider)', paddingBottom: '14px', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="badge badge-warning" style={{ fontSize: '0.78rem', padding: '5px 14px' }}>
+                        <i className="fa-solid fa-clipboard-list"></i> Active Picklist — {activeReq.id}
+                      </span>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ borderColor: '#008b8b', color: '#008b8b', fontWeight: 700 }}
+                        onClick={() => setSmartLabelOpen(true)}
+                      >
+                        <i className="fa-solid fa-qrcode"></i> Generate Smart Label (ESP32-CAM)
+                      </button>
+                    </div>
                     <span style={{ fontSize: '0.82rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
                       Destination: <strong style={{ color: '#0f172a' }}>{activeReq.requestingHospitalId}</strong>
                     </span>
@@ -231,6 +242,13 @@ export default function PharmacistPortal() {
           )}
         </div>
       </div>
+
+      {/* Smart Optical QR Generator Modal */}
+      <SmartLabelModal
+        isOpen={smartLabelOpen}
+        onClose={() => setSmartLabelOpen(false)}
+        defaultItem={activeReq}
+      />
     </div>
   );
 }
