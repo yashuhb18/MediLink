@@ -266,6 +266,7 @@ const db = {
       expiryDate: data.expiryDate || new Date(Date.now() + 365*86400000).toISOString().split('T')[0],
       rfidUid: data.rfidUid || `TAG-${Math.floor(Math.random()*9000+1000)}`,
       boxId: data.boxId || 'BOX-A1',
+      loadCellId: data.loadCellId || 'LC-01',
       shelfPosition: data.shelfPosition || 'Shelf 1A',
       sensorHygiene: 'OK',
       locked: false,

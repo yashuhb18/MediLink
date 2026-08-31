@@ -113,13 +113,16 @@ app.post('/api/upload', async (req, res) => {
         rawImageId: newImage._id,
         imageBase64: image_data
       });
-    } else {
-      console.log(`[ESP32-CAM] Image stored. Waiting for QR scan or action selection.`);
-      broadcastSSE({
-        type: 'RAW_IMAGE_UPLOADED',
-        imageId: newImage._id,
-        timestamp: new Date().toISOString()
-      });
+    }
+
+    if (scanResult) {
+      newImage.medicine = scanResult.medicine || qrResult?.payload?.medicine || headerMedicine || "Head ache 1mg";
+      newImage.batch = scanResult.batch || qrResult?.payload?.batch || headerBatch || "HA-902";
+      newImage.action = scanResult.action || "ADD";
+      newImage.weightKg = scanResult.weightKg || parseFloat(headerWeight) || 1.0;
+      newImage.decodedPayload = qrResult?.payload || null;
+      newImage.glmReasoning = scanResult.glmVerification?.explanation || scanResult.message;
+      await newImage.save();
     }
 
     return res.status(200).json({

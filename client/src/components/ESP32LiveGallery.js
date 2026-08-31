@@ -221,15 +221,31 @@ export default function ESP32LiveGallery() {
 
                 {/* Metadata Details */}
                 <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>{img.source || 'ESP32-CAM'}</span>
-                    <span style={{ color: '#10b981', fontWeight: 800, fontSize: '0.72rem', background: '#ecfdf5', padding: '2px 8px', borderRadius: '999px' }}>
-                      ● RECEIVED
+                  {/* Medicine Name Title */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
+                    <div>
+                      <div style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
+                        💊 {img.medicine || (img.decodedPayload ? img.decodedPayload.medicine : 'Head ache 1mg')}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
+                        Batch: {img.batch || (img.decodedPayload ? img.decodedPayload.batch : 'HA-902')} · {img.weightKg || (img.decodedPayload ? img.decodedPayload.weightKg : 1.0)} kg
+                      </div>
+                    </div>
+                    <span style={{
+                      color: img.action === 'REMOVE' ? '#ef4444' : '#10b981',
+                      fontWeight: 800,
+                      fontSize: '0.68rem',
+                      background: img.action === 'REMOVE' ? '#fef2f2' : '#ecfdf5',
+                      padding: '3px 8px',
+                      borderRadius: '999px',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {img.action === 'REMOVE' ? '● REMOVED' : '● ADDED'}
                     </span>
                   </div>
 
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
-                    {new Date(img.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} · {new Date(img.createdAt).toLocaleDateString()}
+                  <div style={{ fontSize: '0.70rem', color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
+                    Capture: {new Date(img.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} · {new Date(img.createdAt).toLocaleDateString()}
                   </div>
 
                   {/* Quick Action Options Toggle */}
