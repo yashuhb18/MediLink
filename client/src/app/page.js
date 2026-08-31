@@ -286,11 +286,11 @@ export default function UniversalLandingPage() {
   };
 
   const demoAccounts = [
-    { roleKey: 'admin', role: 'Network Admin', email: 'admin@medilink.ai', pass: 'admin123', icon: 'fa-user-shield', desc: 'Global supply chain command matrix, regional heatmap, and emergency override console.', status: 'Command Level' },
-    { roleKey: 'nurse', role: 'Clinical Viewer', email: 'nurse@h01.medilink.ai', pass: 'nurse123', icon: 'fa-magnifying-glass', desc: 'Read-only regional medicine availability directory and stock inquiry system.', status: 'Read Only' },
-    { roleKey: 'supervisor-req', role: 'Requesting Supervisor', email: 'supervisor@h01.medilink.ai', pass: 'super123', icon: 'fa-paper-plane', desc: 'AI shortage predictions tray and emergency redistribution request triggers.', status: 'Node H01 Lead' },
-    { roleKey: 'supervisor-src', role: 'Source Supervisor', email: 'supervisor@h02.medilink.ai', pass: 'super123', icon: 'fa-boxes-packing', desc: 'Donor priority queue review and Good Samaritan Karma reputation tracker.', status: 'Node H02 Lead' },
-    { roleKey: 'pharmacist', role: 'Dispatch Pharmacist', email: 'pharmacist@h02.medilink.ai', pass: 'pharm123', icon: 'fa-truck-ramp-box', desc: 'Dual RFID + Barcode Scanner physical workstation verification station.', status: 'Hardware Station' },
+    { roleKey: 'admin', role: 'Network Admin', emoji: '🛡️', email: 'admin@medilink.ai', pass: 'admin123', icon: 'fa-user-shield', desc: 'Global supply chain command matrix, regional heatmap, and emergency override console.', status: 'Command Level' },
+    { roleKey: 'nurse', role: 'Clinical Viewer', emoji: '🔍', email: 'nurse@h01.medilink.ai', pass: 'nurse123', icon: 'fa-magnifying-glass', desc: 'Read-only regional medicine availability directory and stock inquiry system.', status: 'Read Only' },
+    { roleKey: 'supervisor-req', role: 'Requesting Supervisor', emoji: '🚨', email: 'supervisor@h01.medilink.ai', pass: 'super123', icon: 'fa-paper-plane', desc: 'AI shortage predictions tray and emergency redistribution request triggers.', status: 'Node H01 Lead' },
+    { roleKey: 'supervisor-src', role: 'Source Supervisor', emoji: '📦', email: 'supervisor@h02.medilink.ai', pass: 'super123', icon: 'fa-boxes-packing', desc: 'Donor priority queue review and Good Samaritan Karma reputation tracker.', status: 'Node H02 Lead' },
+    { roleKey: 'pharmacist', role: 'Dispatch Pharmacist', emoji: '💊', email: 'pharmacist@h02.medilink.ai', pass: 'pharm123', icon: 'fa-truck-ramp-box', desc: 'Dual RFID + Barcode Scanner physical workstation verification station.', status: 'Hardware Station' },
   ];
 
   const flowSteps = [
@@ -864,13 +864,14 @@ export default function UniversalLandingPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
                     <div style={{
-                      width: '46px', height: '46px', borderRadius: '14px',
-                      background: '#e6f7f6', color: '#008b8b',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem',
-                      border: '1.5px solid #cceee9',
+                      width: '48px', height: '48px', borderRadius: '14px',
+                      background: 'linear-gradient(135deg, #e6f7f6 0%, #d5f2ee 100%)', color: '#008b8b',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem',
+                      border: '1.5px solid #bcebe4',
+                      boxShadow: '0 4px 10px rgba(0, 139, 139, 0.1)',
                       transition: 'transform 0.2s ease',
                     }}>
-                      <i className={`fa-solid ${p.icon}`}></i>
+                      {p.emoji ? <span>{p.emoji}</span> : <i className={`fa-solid ${p.icon}`}></i>}
                     </div>
                     <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#10b981', background: '#ecfdf5', border: '1px solid #d1fae5', padding: '3px 8px', borderRadius: '9999px' }}>
                       ● {p.status}

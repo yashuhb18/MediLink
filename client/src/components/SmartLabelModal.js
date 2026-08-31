@@ -13,19 +13,8 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem }) {
 
   if (!isOpen) return null;
 
-  const payload = {
-    token: `ML-OPT-${Date.now().toString(36).toUpperCase()}`,
-    action,
-    medicine,
-    batch,
-    weightKg: parseFloat(weightKg) || 1.0,
-    requestId: requestId || undefined,
-    sourceHospital,
-    destHospital,
-    generatedAt: new Date().toISOString()
-  };
-
-  const payloadString = JSON.stringify(payload);
+  // Ultra-compact token for massive bold QR pixels (extremely easy for low-cost OV2640 lenses to decode)
+  const compactPayload = `ML:${action}:${requestId || 'REQ-1001'}:${batch || 'PA-902'}:${weightKg || '1.0'}:${medicine || 'Paracetamol'}`;
 
   return (
     <div style={{
@@ -151,9 +140,9 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem }) {
               alignItems: 'center'
             }}>
               <QRCodeSVG
-                value={payloadString}
-                size={180}
-                level="M"
+                value={compactPayload}
+                size={220}
+                level="L"
                 includeMargin={true}
               />
               <div style={{ marginTop: '10px', textAlign: 'center' }}>
