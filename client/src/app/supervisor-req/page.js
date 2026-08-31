@@ -4,7 +4,6 @@ import Sidebar from '@/components/Sidebar';
 import PortalHeader from '@/components/PortalHeader';
 import StatusPipeline from '@/components/StatusPipeline';
 import SmartLabelModal from '@/components/SmartLabelModal';
-import ESP32LiveGallery from '@/components/ESP32LiveGallery';
 import { inventoryApi, transferApi, karmaApi } from '@/lib/api';
 
 export default function RequestingSupervisorPortal() {
@@ -115,9 +114,6 @@ export default function RequestingSupervisorPortal() {
               </div>
             </div>
           </div>
-
-          {/* Live Camera Feed & Action Console */}
-          <ESP32LiveGallery />
 
           {/* Tabs */}
           <div className="tab-nav">
