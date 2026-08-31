@@ -15,6 +15,8 @@ export default function RequestingSupervisorPortal() {
   const [manualQty, setManualQty] = useState('1.0');
   const [manualUrgency, setManualUrgency] = useState('MEDIUM');
   const [manualNotes, setManualNotes] = useState('');
+  const [aiExplanations, setAiExplanations] = useState({});
+  const [explainingId, setExplainingId] = useState(null);
 
   useEffect(() => {
     const userStr = localStorage.getItem('medilink_user');
@@ -153,11 +155,49 @@ export default function RequestingSupervisorPortal() {
                         <div><div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Deficit</div><strong style={{ color: '#10b981' }}>{pred.deficitKg} kg</strong></div>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ borderColor: '#008b8b', color: '#008b8b', fontWeight: 600 }}
+                          onClick={async () => {
+                            setExplainingId(pred.inventoryItemId);
+                            try {
+                              const res = await aiApi.explainPrediction(pred);
+                              setAiExplanations(prev => ({ ...prev, [pred.inventoryItemId]: res.explanation }));
+                            } catch (e) {
+                              setAiExplanations(prev => ({ ...prev, [pred.inventoryItemId]: "Failed to get GLM-4 explanation." }));
+                            } finally {
+                              setExplainingId(null);
+                            }
+                          }}
+                        >
+                          <i className="fa-solid fa-brain"></i> {explainingId === pred.inventoryItemId ? 'GLM-4 Analyzing...' : 'GLM-4 Deep Analysis'}
+                        </button>
                         <button className="btn btn-primary" onClick={() => handleApproveAi(pred)}>
                           <i className="fa-solid fa-check"></i> Approve & Match Source
                         </button>
                       </div>
+
+                      {/* Live GLM-4 Analysis Accordion */}
+                      {aiExplanations[pred.inventoryItemId] && (
+                        <div style={{
+                          marginTop: '14px',
+                          padding: '14px 16px',
+                          background: 'linear-gradient(135deg, #f0fdfa 0%, #e6f7f6 100%)',
+                          borderRadius: '10px',
+                          border: '1px solid #99f6e4',
+                          color: '#134e4a',
+                          fontSize: '0.85rem',
+                          lineHeight: 1.6
+                        }}>
+                          <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', color: '#008b8b' }}>
+                            <i className="fa-solid fa-microchip"></i> Local GLM-4 Clinical Reasoning
+                          </div>
+                          <div style={{ whiteSpace: 'pre-wrap' }}>
+                            {aiExplanations[pred.inventoryItemId]}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

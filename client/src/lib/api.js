@@ -74,3 +74,10 @@ export const adminApi = {
   getSensorAlerts: () => apiFetch('/admin/sensor-alerts'),
   updateHospital: (id, updates) => apiFetch(`/hospitals/${id}`, { method: 'PUT', body: JSON.stringify(updates) })
 };
+
+export const aiApi = {
+  getStatus: () => apiFetch('/ai/status'),
+  chat: (message, hospitalId, role) => apiFetch('/ai/chat', { method: 'POST', body: JSON.stringify({ message, hospitalId, role }) }),
+  explainPrediction: (prediction) => apiFetch('/ai/explain', { method: 'POST', body: JSON.stringify({ prediction }) })
+};
+

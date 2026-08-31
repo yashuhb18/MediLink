@@ -21,6 +21,7 @@ app.use('/api/transfers', require('./routes/transfer.routes'));
 app.use('/api/karma', require('./routes/karma.routes'));
 app.use('/api/admin', require('./routes/admin.routes'));
 app.use('/api/iot', require('./routes/iot.routes'));
+app.use('/api/ai', require('./routes/ai.routes'));
 
 // Direct ESP32 Upload Endpoint Alias
 const CapturedImage = require('./models/CapturedImage');
