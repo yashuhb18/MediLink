@@ -225,72 +225,60 @@ export default function UniversalLandingPage() {
 
   const heroSlides = [
     {
-      src: '/real-doctor-hero.png',
-      alt: 'MediLink Doctor Command Center',
-      tag: 'Hospital Network Command',
-      icon: 'fa-user-doctor'
-    },
-    {
-      src: '/hero-2.webp',
-      alt: 'Smart Medical Telemetry',
-      tag: 'Smart Medical Telemetry',
-      icon: 'fa-laptop-medical'
-    },
-    {
-      src: '/hero-3.webp',
-      alt: 'Automated Pharmacy Inventory',
+      src: '/hero-1-pharmacy.jpg',
+      alt: 'Automated Pharmacy Inventory & Medicine Stock',
       tag: 'Automated Pharmacy Inventory',
       icon: 'fa-pills'
     },
     {
-      src: '/hero-4.webp',
-      alt: 'AI Shortage Forecasting',
-      tag: 'AI Shortage Forecasting',
-      icon: 'fa-brain'
+      src: '/hero-2-doctor.jpg',
+      alt: 'Hospital Network Command & Patient Telemetry',
+      tag: 'Hospital Network Command',
+      icon: 'fa-user-doctor'
     },
     {
-      src: '/hero-5.webp',
-      alt: 'IoT Dual-Lock Hardware Station',
-      tag: 'IoT Dual-Lock Hardware Station',
+      src: '/hero-3-smartvault.jpg',
+      alt: 'IoT Dual-Lock Hardware Station & Laser Scanner',
+      tag: 'IoT Dual-Lock Smart Vault',
       icon: 'fa-barcode'
     },
     {
-      src: '/hero-6.webp',
-      alt: 'Regional Node Routing',
-      tag: 'Regional Node Routing',
-      icon: 'fa-network-wired'
+      src: '/hero-slide-1.png',
+      alt: 'Smart Medical Telemetry & Load-Cell Scales',
+      tag: 'Smart Medical Telemetry',
+      icon: 'fa-laptop-medical'
     },
     {
-      src: '/hero-7.webp',
-      alt: 'Clinical Supervisor Approval',
+      src: '/hero-slide-2.jpg',
+      alt: 'Clinical Supervisor 1-Click Digital Approval',
       tag: 'Clinical Supervisor Approval',
       icon: 'fa-signature'
     },
     {
-      src: '/hero-8.webp',
-      alt: 'Real-time Cold-Chain Dispatch',
+      src: '/hero-slide-3.jpg',
+      alt: 'Real-time Cold-Chain GPS Transit Corridor',
       tag: 'Real-time Cold-Chain Dispatch',
       icon: 'fa-truck-medical'
     },
     {
-      src: '/hero-9.webp',
-      alt: 'Hospital Mesh Network',
-      tag: 'Hospital Mesh Network',
+      src: '/hero-slide-4.jpg',
+      alt: 'Inter-Hospital Mesh Network Grid',
+      tag: 'Hospital Mesh Network Grid',
       icon: 'fa-hospital'
     },
     {
-      src: '/hero-10.webp',
-      alt: 'Karma Reputation System',
-      tag: 'Karma Reputation System',
-      icon: 'fa-award'
-    },
+      src: '/hero-slide-5.png',
+      alt: 'Laser Barcode & RFID Dual Verification',
+      tag: 'Laser Barcode + RFID Match',
+      icon: 'fa-id-card'
+    }
   ];
 
-  // Auto-rotate hero photos every 1 second
+  // Auto-rotate hero photos smoothly every 3.5 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 1000);
+    }, 3500);
     return () => clearInterval(timer);
   }, [heroSlides.length]);
 
