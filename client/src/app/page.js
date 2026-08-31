@@ -225,10 +225,22 @@ export default function UniversalLandingPage() {
 
   const heroSlides = [
     {
+      src: '/patient-shortage-pain.jpg',
+      alt: 'Patient Suffering from Medicine Shortage & Severe Migraine',
+      tag: 'Critical Medicine Shortage Problem',
+      icon: 'fa-triangle-exclamation'
+    },
+    {
       src: '/hero-1-pharmacy.jpg',
       alt: 'Automated Pharmacy Inventory & Medicine Stock',
       tag: 'Automated Pharmacy Inventory',
       icon: 'fa-pills'
+    },
+    {
+      src: '/patient-shortage-crisis.jpg',
+      alt: 'Hospital ICU Patient Facing Supply Stockout',
+      tag: 'Zero-Stockout Emergency Lifeline',
+      icon: 'fa-heart-pulse'
     },
     {
       src: '/hero-2-doctor.jpg',
@@ -259,18 +271,6 @@ export default function UniversalLandingPage() {
       alt: 'Real-time Cold-Chain GPS Transit Corridor',
       tag: 'Real-time Cold-Chain Dispatch',
       icon: 'fa-truck-medical'
-    },
-    {
-      src: '/hero-slide-4.jpg',
-      alt: 'Inter-Hospital Mesh Network Grid',
-      tag: 'Hospital Mesh Network Grid',
-      icon: 'fa-hospital'
-    },
-    {
-      src: '/hero-slide-5.png',
-      alt: 'Laser Barcode & RFID Dual Verification',
-      tag: 'Laser Barcode + RFID Match',
-      icon: 'fa-id-card'
     }
   ];
 
