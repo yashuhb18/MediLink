@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+*/node_modules/
+.pnp
+.pnp.js
+
+# Testing & Logs
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js build output
+.next/
+*/.next/
+out/
+build/
+dist/
+
+# Environment Variables & Secrets
+.env
+.env*.local
+*.env
+server/.env
+server/.env.local
+
+# Binaries & Tooling
+cloudflared.exe
+*.exe
+*.dll
+
+# Media & Large Files (>100MB GitHub limit)
+*.mp4
+*.mov
+*.avi
+
+# OS & IDE Files
+.DS_Store
+*.pem
+.vscode/
+.idea/
+.gemini/
+*.tmp
+server/sample_received.jpg
+
