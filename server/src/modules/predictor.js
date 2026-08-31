@@ -3,7 +3,7 @@ const { db } = require('../config/firebase');
 
 const Predictor = {
   calculateConsumptionRate(history) {
-    if (!history || history.length < 5) return 0;
+    if (!Array.isArray(history) || history.length < 5) return 0;
     const recent = history.slice(-7);
     const oldest = recent[0], newest = recent[recent.length - 1];
     const hours = (newest.timestamp - oldest.timestamp) / 3600000;
@@ -28,7 +28,7 @@ const Predictor = {
 
     for (const item of items) {
       if (db.isExpired(item)) continue;
-      const history = db.getWeightHistory(item.id);
+      const history = (await db.getWeightHistory(item.id)) || [];
       const rate = this.calculateConsumptionRate(history);
       const hoursToZero = this.predictZeroStockTime(item.currentStockKg, rate);
       const hoursToThreshold = this.predictThresholdBreachTime(item.currentStockKg, item.minThresholdKg, rate);
@@ -50,7 +50,7 @@ const Predictor = {
           deficitKg: deficit,
           urgency: hoursToZero <= 2 ? 'HIGH' : hoursToZero <= 5 ? 'MEDIUM' : 'LOW',
           isAlreadyBelowMin: item.currentStockKg < item.minThresholdKg,
-          sparkline: history.slice(-10).map(h => h.weightKg)
+          sparkline: Array.isArray(history) ? history.slice(-10).map(h => h.weightKg) : []
         });
       }
     }

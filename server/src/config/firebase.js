@@ -220,53 +220,87 @@ const db = {
   // ── Inventory ──
   async getInventoryForHospital(hospitalId) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const list = await Inventory.find({ hospitalId }).lean();
-      return list.map(toPlain);
+      try {
+        const list = await Inventory.find({ hospitalId }).lean();
+        if (list && list.length > 0) return list.map(toPlain);
+      } catch (err) {
+        console.warn('[MongoDB] getInventoryForHospital fallback:', err.message);
+      }
     }
     if (this.mode === 'memory') return memoryDb.inventory.filter(i => i.hospitalId === hospitalId);
-    const snap = await firestoreDb.collection('inventory').where('hospitalId', '==', hospitalId).get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+      const snap = await firestoreDb.collection('inventory').where('hospitalId', '==', hospitalId).get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      return memoryDb.inventory.filter(i => i.hospitalId === hospitalId);
+    }
   },
 
   async getAllInventory() {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const list = await Inventory.find({}).lean();
-      return list.map(toPlain);
+      try {
+        const list = await Inventory.find({}).lean();
+        if (list && list.length > 0) return list.map(toPlain);
+      } catch (err) {
+        console.warn('[MongoDB] getAllInventory fallback:', err.message);
+      }
     }
     if (this.mode === 'memory') return memoryDb.inventory;
-    const snap = await firestoreDb.collection('inventory').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+      const snap = await firestoreDb.collection('inventory').get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      return memoryDb.inventory;
+    }
   },
 
   async getInventoryItem(id) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const item = await Inventory.findOne({ id }).lean();
-      return item ? toPlain(item) : null;
+      try {
+        const item = await Inventory.findOne({ id }).lean();
+        if (item) return toPlain(item);
+      } catch (err) {
+        console.warn('[MongoDB] getInventoryItem fallback:', err.message);
+      }
     }
     if (this.mode === 'memory') return memoryDb.inventory.find(i => i.id === id) || null;
-    const doc = await firestoreDb.collection('inventory').doc(id).get();
-    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    try {
+      const doc = await firestoreDb.collection('inventory').doc(id).get();
+      return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    } catch (e) {
+      return memoryDb.inventory.find(i => i.id === id) || null;
+    }
   },
 
   async updateInventoryItem(id, updates) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const updated = await Inventory.findOneAndUpdate({ id }, updates, { new: true }).lean();
-      if (updated && updates.currentStockKg !== undefined) {
-        await WeightHistory.create({
-          inventoryItemId: id,
-          timestamp: Date.now(),
-          weightKg: updates.currentStockKg
-        });
+      try {
+        const updated = await Inventory.findOneAndUpdate({ id }, updates, { new: true }).lean();
+        if (updated && updates.currentStockKg !== undefined) {
+          await WeightHistory.create({
+            inventoryItemId: id,
+            timestamp: Date.now(),
+            weightKg: updates.currentStockKg
+          }).catch(() => {});
+        }
+        if (updated) return toPlain(updated);
+      } catch (err) {
+        console.warn('[MongoDB] updateInventoryItem fallback:', err.message);
       }
-      return toPlain(updated);
     }
     if (this.mode === 'memory') {
       const item = memoryDb.inventory.find(i => i.id === id);
       if (item) Object.assign(item, updates);
       return item;
     }
-    await firestoreDb.collection('inventory').doc(id).update(updates);
-    return this.getInventoryItem(id);
+    try {
+      await firestoreDb.collection('inventory').doc(id).update(updates);
+      return this.getInventoryItem(id);
+    } catch (e) {
+      const item = memoryDb.inventory.find(i => i.id === id);
+      if (item) Object.assign(item, updates);
+      return item;
+    }
   },
 
   isExpired(item) {
@@ -294,8 +328,12 @@ const db = {
   // ── Weight History ──
   async getWeightHistory(inventoryItemId) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const docs = await WeightHistory.find({ inventoryItemId }).sort({ timestamp: 1 }).lean();
-      return docs.map(toPlain);
+      try {
+        const docs = await WeightHistory.find({ inventoryItemId }).sort({ timestamp: 1 }).lean();
+        if (docs && docs.length > 0) return docs.map(toPlain);
+      } catch (err) {
+        console.warn('[MongoDB] getWeightHistory fallback:', err.message);
+      }
     }
     return memoryDb.weightHistory[inventoryItemId] || [];
   },
@@ -303,18 +341,18 @@ const db = {
   // ── Transfer Requests ──
   async getTransferRequests(filter = {}) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const query = {};
-      if (filter.requestingHospitalId) query.requestingHospitalId = filter.requestingHospitalId;
-      if (filter.sourceHospitalId) query.sourceHospitalId = filter.sourceHospitalId;
-      if (filter.status) query.status = filter.status;
-      const list = await TransferRequest.find(query).sort({ createdAt: -1 }).lean();
-      return list.map(toPlain);
+      try {
+        const query = {};
+        if (filter.requestingHospitalId) query.requestingHospitalId = filter.requestingHospitalId;
+        if (filter.sourceHospitalId) query.sourceHospitalId = filter.sourceHospitalId;
+        if (filter.status) query.status = filter.status;
+        const list = await TransferRequest.find(query).sort({ createdAt: -1 }).lean();
+        if (list && list.length > 0) return list.map(toPlain);
+      } catch (err) {
+        console.warn('[MongoDB] getTransferRequests fallback:', err.message);
+      }
     }
     let reqs = (this.mode === 'memory' ? memoryDb.transferRequests : []) || [];
-    if (this.mode === 'firestore') {
-      const snap = await firestoreDb.collection('transferRequests').orderBy('createdAt', 'desc').get();
-      reqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    }
     if (filter.requestingHospitalId) reqs = reqs.filter(r => r.requestingHospitalId === filter.requestingHospitalId);
     if (filter.sourceHospitalId) reqs = reqs.filter(r => r.sourceHospitalId === filter.sourceHospitalId);
     if (filter.status) reqs = reqs.filter(r => r.status === filter.status);

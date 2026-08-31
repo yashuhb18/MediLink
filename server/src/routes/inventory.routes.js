@@ -37,7 +37,7 @@ router.get('/search', async (req, res) => {
 // GET /api/inventory/:id/history
 router.get('/:id/history', async (req, res) => {
   try {
-    const history = db.getWeightHistory(req.params.id);
+    const history = (await db.getWeightHistory(req.params.id)) || [];
     res.json(history);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
