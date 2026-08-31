@@ -81,3 +81,8 @@ export const aiApi = {
   explainPrediction: (prediction) => apiFetch('/ai/explain', { method: 'POST', body: JSON.stringify({ prediction }) })
 };
 
+export const cameraApi = {
+  getLatestImages: () => apiFetch('/upload/latest')
+};
+
+

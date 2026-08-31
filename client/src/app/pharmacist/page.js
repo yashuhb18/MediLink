@@ -5,6 +5,7 @@ import PortalHeader from '@/components/PortalHeader';
 import TrafficLight from '@/components/TrafficLight';
 import IoTSimulator from '@/components/IoTSimulator';
 import SmartLabelModal from '@/components/SmartLabelModal';
+import ESP32LiveGallery from '@/components/ESP32LiveGallery';
 import { transferApi } from '@/lib/api';
 
 export default function PharmacistPortal() {
@@ -139,6 +140,9 @@ export default function PharmacistPortal() {
               </div>
             </div>
           )}
+
+          {/* Live Camera Feed & Optical Scan Gallery */}
+          <ESP32LiveGallery />
 
           {/* Active Picklist (Shown on dashboard and picklist) */}
           {(section === 'dashboard' || section === 'picklist') && (

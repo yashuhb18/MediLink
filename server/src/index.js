@@ -40,6 +40,15 @@ app.get('/api/upload', (req, res) => {
   });
 });
 
+app.get('/api/upload/latest', async (req, res) => {
+  try {
+    const images = await CapturedImage.find().sort({ createdAt: -1 }).limit(12).lean();
+    res.json(images);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/upload', async (req, res) => {
   try {
     const { image_data, source, requestId, inventoryItemId } = req.body;

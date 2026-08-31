@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar';
 import PortalHeader from '@/components/PortalHeader';
 import HeatmapGrid from '@/components/HeatmapGrid';
 import RegionalLiveMap from '@/components/RegionalLiveMap';
+import ESP32LiveGallery from '@/components/ESP32LiveGallery';
 import { adminApi } from '@/lib/api';
 
 export default function AdminPortal() {
@@ -213,6 +214,9 @@ export default function AdminPortal() {
               </div>
             </section>
           )}
+
+          {/* SECTION: Live Camera Feed & Optical Scan Gallery */}
+          <ESP32LiveGallery />
 
           {/* SECTION: Sensor Alerts / Sensor Hygiene */}
           {(section === 'dashboard' || section === 'alerts') && (
