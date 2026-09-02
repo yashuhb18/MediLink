@@ -3,12 +3,14 @@ import React from 'react';
 
 const navConfig = {
   NETWORK_ADMIN: [
-    { label: 'Dashboard', icon: 'fa-house', id: 'dashboard' },
+    { label: 'Warehouse Hub', icon: 'fa-warehouse', id: 'dashboard' },
+    { label: 'QR & Batch Studio', icon: 'fa-qrcode', id: 'qr-studio' },
+    { label: 'Consignment Outflow', icon: 'fa-truck-fast', id: 'consignments' },
     { label: 'Regional Grid', icon: 'fa-map-location-dot', id: 'heatmap' },
     { label: 'Hospital Nodes', icon: 'fa-hospital-user', id: 'nodes' },
     { label: 'Emergency Override', icon: 'fa-shield-halved', id: 'override' },
-    { label: 'Audit Trail', icon: 'fa-receipt', id: 'audit' },
     { label: 'Sensor Hygiene', icon: 'fa-tower-broadcast', id: 'alerts' },
+    { label: 'Audit Trail', icon: 'fa-receipt', id: 'audit' },
   ],
   CLINICAL_VIEWER: [
     { label: 'Dashboard', icon: 'fa-house', id: 'dashboard' },
@@ -16,15 +18,21 @@ const navConfig = {
     { label: 'Inventory Directory', icon: 'fa-pills', id: 'inventory' },
   ],
   REQUESTING_SUPERVISOR: [
-    { label: 'Dashboard', icon: 'fa-house', id: 'dashboard' },
+    { label: 'Hospital Inventory', icon: 'fa-boxes-stacked', id: 'inventory' },
     { label: 'AI Shortage Predictions', icon: 'fa-brain', id: 'predictions' },
-    { label: 'Emergency Request', icon: 'fa-paper-plane', id: 'manual' },
-    { label: 'Request Tracker', icon: 'fa-satellite-dish', id: 'tracker' },
+    { label: 'Emergency Sourcing', icon: 'fa-truck-medical', id: 'manual' },
+    { label: 'Incoming Requests', icon: 'fa-inbox', id: 'queue' },
+    { label: 'Live GPS Fleet', icon: 'fa-satellite-dish', id: 'tracker' },
+    { label: 'Karma Leaderboard', icon: 'fa-award', id: 'karma' },
+    { label: 'Audit History', icon: 'fa-clock-rotate-left', id: 'audit' },
   ],
   SOURCE_SUPERVISOR: [
-    { label: 'Dashboard', icon: 'fa-house', id: 'dashboard' },
-    { label: 'Incoming Queue', icon: 'fa-inbox', id: 'queue' },
-    { label: 'Karma Score', icon: 'fa-award', id: 'karma' },
+    { label: 'Hospital Inventory', icon: 'fa-boxes-stacked', id: 'inventory' },
+    { label: 'AI Shortage Predictions', icon: 'fa-brain', id: 'predictions' },
+    { label: 'Emergency Sourcing', icon: 'fa-truck-medical', id: 'manual' },
+    { label: 'Incoming Requests', icon: 'fa-inbox', id: 'queue' },
+    { label: 'Live GPS Fleet', icon: 'fa-satellite-dish', id: 'tracker' },
+    { label: 'Karma Leaderboard', icon: 'fa-award', id: 'karma' },
     { label: 'Audit History', icon: 'fa-clock-rotate-left', id: 'audit' },
   ],
   DISPATCH_PHARMACIST: [

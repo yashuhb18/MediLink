@@ -18,7 +18,20 @@ export default function ClinicalPortal() {
     if (u.role !== 'CLINICAL_VIEWER') { window.location.href = '/'; return; }
     setUser(u);
     handleSearch('', u.hospitalId);
-  }, []);
+
+    // ⚡ Real-Time SSE Listener for ESP32-CAM Scans & Inventory Updates
+    const es = new EventSource('http://localhost:5000/api/events');
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ESP32_SCAN_SUCCESS' || data.type === 'INVENTORY_UPDATED' || data.type === 'FACTORY_BATCH_CREATED') {
+          handleSearch(searchQuery, u.hospitalId);
+        }
+      } catch (e) {}
+    };
+
+    return () => es.close();
+  }, [searchQuery]);
 
   const handleSearch = async (query, hospitalId) => {
     setLoading(true);
@@ -145,8 +158,12 @@ export default function ClinicalPortal() {
                       <div style={{ textAlign: 'right' }}>
                         {isOwn ? (
                           <>
-                            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#008b8b' }}>{item.availability.exactKg} kg</div>
-                            <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>Exact Local Stock</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#008b8b' }}>
+                              {item.packageCount || Math.round(item.availability.exactKg * 20)} {item.dosageUnit || 'Strips'}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
+                              {item.availability.exactKg} kg gross
+                            </div>
                           </>
                         ) : (
                           <>

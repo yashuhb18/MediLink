@@ -170,7 +170,10 @@ export default function PharmacistPortal() {
                     </div>
                     <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '12px', border: '1px solid #e2efee' }}>
                       <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>Target Quantity</div>
-                      <strong style={{ fontSize: '1.1rem', color: '#008b8b' }}>{activeReq.quantityKg} kg</strong>
+                      <strong style={{ fontSize: '1.1rem', color: '#008b8b' }}>
+                        {activeReq.packageCount || (activeReq.quantityKg * 20)} {activeReq.dosageUnit || 'Strips'}
+                      </strong>
+                      <div style={{ fontSize: '0.68rem', color: '#64748b' }}>({activeReq.quantityKg} kg gross)</div>
                     </div>
                     <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '12px', border: '1px solid #e2efee' }}>
                       <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>RFID Tag Match</div>
@@ -186,6 +189,18 @@ export default function PharmacistPortal() {
                     <i className="fa-solid fa-shoe-prints" style={{ marginRight: '8px' }}></i>
                     <strong>Retrieval Instructions:</strong> Walk to <strong>{activeReq.shelfPosition || 'Bay 4 / Shelf 2'}</strong> → Retrieve Container <strong>{activeReq.boxId || 'BOX01'}</strong> → Place on verification scale.
                   </div>
+
+                  {activeReq.driverName && (
+                    <div style={{ marginTop: '12px', background: '#f8fafc', border: '1px solid #cbd5e1', padding: '10px 14px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
+                      <div>
+                        <i className="fa-solid fa-truck-medical" style={{ color: '#008b8b', marginRight: '6px' }}></i>
+                        Assigned Courier / Ambulance: <strong>{activeReq.driverName} ({activeReq.vehicleNumber || 'KA-09-EA-4421'})</strong>
+                      </div>
+                      <div style={{ color: '#008b8b', fontWeight: 700 }}>
+                        <i className="fa-solid fa-phone" style={{ marginRight: '4px' }}></i> {activeReq.driverPhone}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="card empty-state" style={{ marginBottom: '20px' }}>

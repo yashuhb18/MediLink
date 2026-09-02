@@ -1,0 +1,44 @@
+services:
+  # ⚙️ MediLink Express API & Vision Backend
+  server:
+    image: yashwanth0505/medilink-backend:latest
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: medilink-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - DB_MODE=mongodb
+      - MONGODB_URI=mongodb+srv://yashuhb18_db_user:XfcOfdMvKVSmSHxJ@cluster0.6mqivcs.mongodb.net/medilink?retryWrites=true&w=majority&appName=Cluster0
+      - JWT_SECRET=medilink-ai-dev-secret-2024
+      - CLOUDINARY_CLOUD_NAME=daxycknxl
+      - CLOUDINARY_API_KEY=218385963343261
+      - CLOUDINARY_API_SECRET=OBN1ZlxGRnjyADierOqARDf_yQ4
+      - CLOUDINARY_URL=cloudinary://218385963343261:OBN1ZlxGRnjyADierOqARDf_yQ4@daxycknxl
+    networks:
+      - medilink-net
+
+  # 🖥️ MediLink Next.js 14 Web Portals & Role Cockpits
+  client:
+    image: yashwanth0505/medilink-frontend:latest
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: medilink-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:5000/api
+    depends_on:
+      - server
+    networks:
+      - medilink-net
+
+networks:
+  medilink-net:
+    driver: bridge

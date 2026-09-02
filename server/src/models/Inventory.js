@@ -10,6 +10,10 @@ const inventorySchema = new mongoose.Schema({
   batch: { type: String, required: true },
   currentStockKg: { type: Number, required: true },
   minThresholdKg: { type: Number, required: true },
+  dosageForm: { type: String, default: 'Tablets' }, // Tablets, Syrups, Injections, Ointments, Bulk Powders
+  dosageUnit: { type: String, default: 'Strips' }, // Strips, Bottles, Vials, Tubes, kg, Liters, Boxes
+  packageCount: { type: Number, default: 100 },
+  unitDescription: { type: String, default: '100 Strips' },
   expiryDate: { type: String, required: true },
   shelfPosition: { type: String, required: true },
   locked: { type: Boolean, default: false }

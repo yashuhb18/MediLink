@@ -66,4 +66,81 @@ router.get('/sensor-alerts', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /api/admin/create-batch (Factory Batch Serialization)
+router.post('/create-batch', async (req, res) => {
+  try {
+    const {
+      medicine,
+      batch,
+      weightKg,
+      minThresholdKg,
+      hospitalId,
+      rfidUid,
+      boxId,
+      expiryDate,
+      shelfPosition,
+      coldChain,
+      temperatureRange,
+      tareWeightKg,
+      dosageForm = 'Tablets',
+      dosageUnit = 'Strips',
+      packageCount = 100,
+      unitDescription = '100 Strips'
+    } = req.body;
+
+    if (!medicine || !batch) {
+      return res.status(400).json({ error: 'Medicine name and batch number are required.' });
+    }
+
+    const newItem = await db.createInventoryItem({
+      medicine,
+      batch,
+      currentStockKg: parseFloat(weightKg) || 1.0,
+      minThresholdKg: parseFloat(minThresholdKg) || 1.0,
+      dosageForm,
+      dosageUnit,
+      packageCount: parseInt(packageCount) || 100,
+      unitDescription: unitDescription || `${packageCount} ${dosageUnit}`,
+      hospitalId: hospitalId || 'H01',
+      rfidUid: rfidUid || `TAG-${Math.floor(Math.random() * 9000 + 1000)}`,
+      boxId: boxId || `BOX-${Math.floor(Math.random() * 900 + 100)}`,
+      shelfPosition: shelfPosition || 'Central DC / Bay 1',
+      expiryDate: expiryDate || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]
+    });
+
+    const auditDetail = `Warehouse Serialized Batch: ${medicine} (${newItem.packageCount} ${newItem.dosageUnit}, Batch: ${batch}, RFID: ${newItem.rfidUid}) allocated to ${hospitalId || 'H01'}`;
+    await db.addAuditLog('FACTORY_BATCH_CREATED', auditDetail, hospitalId || 'H01', req.user.id);
+
+    res.status(201).json({
+      success: true,
+      message: `Batch serialized as ${newItem.packageCount} ${newItem.dosageUnit} and published to network successfully!`,
+      item: newItem
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/consignments
+router.get('/consignments', async (req, res) => {
+  try {
+    const allInv = await db.getAllInventory();
+    const consignments = allInv.slice(-10).map((inv, idx) => ({
+      consignmentId: `CSG-2026-${1000 + idx}`,
+      medicine: inv.medicine,
+      batch: inv.batch,
+      weightKg: inv.currentStockKg,
+      rfidUid: inv.rfidUid,
+      boxId: inv.boxId,
+      destHospital: inv.hospitalId,
+      status: 'DISPATCHED_TO_NODE',
+      dispatchedAt: inv.createdAt || new Date(Date.now() - (idx + 1) * 3600000 * 2).toISOString(),
+      qrToken: `SECURE-TOKEN-GS1-${inv.batch}`
+    }));
+    res.json(consignments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -90,20 +90,18 @@ export default function ESP32LiveGallery() {
           padding: '4px'
         }}>
           {images.map((img, idx) => {
-            const isBase64Jpeg = img.image_data?.startsWith('/9j/') || img.image_data?.startsWith('data:image');
-            const imgSrc = img.image_data?.startsWith('data:')
-              ? img.image_data
-              : `data:image/jpeg;base64,${img.image_data}`;
+            const imgSrc = img.imageUrl
+              || (img.image_data?.startsWith('data:') ? img.image_data : `data:image/jpeg;base64,${img.image_data}`);
 
-            const medicineName = img.medicine && img.medicine !== 'Auto-Detected Medicine' && img.medicine !== 'QR_Scan_Pending'
-              ? img.medicine
-              : (img.decodedPayload ? img.decodedPayload.medicine : 'Head ache 1mg');
+            const isBase64Jpeg = !!img.imageUrl || img.image_data?.startsWith('/9j/') || img.image_data?.startsWith('data:image') || !!img.image_data;
 
-            const batchNumber = img.batch && img.batch !== 'Auto-Detect'
-              ? img.batch
-              : (img.decodedPayload ? img.decodedPayload.batch : 'HA-902');
+            const medicineName = img.decodedPayload?.medicine
+              || (img.medicine && img.medicine !== 'Auto-Detected Medicine' && img.medicine !== 'QR_Scan_Pending' ? img.medicine : 'Optical Live Scan');
 
-            const weight = img.weightKg || (img.decodedPayload ? img.decodedPayload.weightKg : 1.0);
+            const batchNumber = img.decodedPayload?.batch
+              || (img.batch && img.batch !== 'Auto-Detect' ? img.batch : 'BATCH-OPTICAL');
+
+            const weight = img.decodedPayload?.weightKg || img.weightKg || 1.0;
 
             return (
               <div

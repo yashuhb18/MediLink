@@ -27,15 +27,14 @@ app.use('/api/events', require('./routes/events.routes').router);
 // Direct ESP32 Upload Endpoint Alias & Vision Engine
 const CapturedImage = require('./models/CapturedImage');
 const { decodeQRFromBuffer } = require('./modules/qr_decoder');
+const { uploadToCloudinary } = require('./config/cloudinary');
 const AutoScanner = require('./modules/auto_scanner');
 const { broadcastSSE } = require('./routes/events.routes');
 
 app.get('/api/upload', (req, res) => {
   res.json({
     status: "online",
-    message: "MediLink ESP32-CAM Upload Endpoint Active!",
-    expectedMethod: "POST",
-    expectedPayload: { image_data: "<BASE64_STRING>", source: "ESP32-CAM" },
+    service: "MediLink ESP32-CAM Image Receiver & Optical Processor",
     timestamp: new Date().toISOString()
   });
 });
@@ -63,15 +62,23 @@ app.post('/api/upload', async (req, res) => {
     const headerBatch = req.headers['x-batch'] || req.headers['batch'] || req.body.batch;
     const headerHospital = req.headers['x-hospital-id'] || req.headers['hospital-id'] || req.body.hospitalId || 'H01';
 
-    // 1. Save Image to MongoDB
+    // 1. Upload to Cloudinary CDN (Fast, durable cloud asset storage)
+    const cloudinaryRes = await uploadToCloudinary(image_data).catch(err => {
+      console.warn('[Cloudinary] Cloud upload skipped:', err.message);
+      return null;
+    });
+
+    // 2. Save Image record to MongoDB
     const newImage = new CapturedImage({
       image_data,
+      imageUrl: cloudinaryRes?.url || null,
+      cloudinaryPublicId: cloudinaryRes?.public_id || null,
       source: source || "ESP32-CAM",
       requestId: requestId || null,
       inventoryItemId: inventoryItemId || null
     });
     await newImage.save();
-    console.log(`[ESP32-CAM] Image saved successfully to MongoDB at ${new Date().toISOString()}`);
+    console.log(`[ESP32-CAM] Image saved successfully to MongoDB at ${new Date().toISOString()}${cloudinaryRes?.url ? ` (Cloudinary: ${cloudinaryRes.url})` : ''}`);
 
     // 2. Optical QR/Barcode Auto-Decoding
     const imgBuffer = Buffer.from(image_data, 'base64');
@@ -92,8 +99,8 @@ app.post('/api/upload', async (req, res) => {
         payload: {
           ...qrResult.payload,
           action: resolvedAction,
-          destHospital: headerHospital,
-          sourceHospital: headerHospital
+          destHospital: qrResult.payload.destHospital || qrResult.payload.hospitalId || headerHospital || 'H01',
+          sourceHospital: qrResult.payload.sourceHospital || headerHospital || 'H01'
         },
         rawImageId: newImage._id,
         imageBase64: image_data
@@ -116,8 +123,8 @@ app.post('/api/upload', async (req, res) => {
     }
 
     if (scanResult) {
-      newImage.medicine = scanResult.medicine || qrResult?.payload?.medicine || headerMedicine || "Head ache 1mg";
-      newImage.batch = scanResult.batch || qrResult?.payload?.batch || headerBatch || "HA-902";
+      newImage.medicine = scanResult.medicine || qrResult?.payload?.medicine || headerMedicine || "Paracetamol 500mg";
+      newImage.batch = scanResult.batch || qrResult?.payload?.batch || headerBatch || "BATCH-2026-X902";
       newImage.action = scanResult.action || "ADD";
       newImage.weightKg = scanResult.weightKg || parseFloat(headerWeight) || 1.0;
       newImage.decodedPayload = qrResult?.payload || null;

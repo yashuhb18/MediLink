@@ -9,6 +9,8 @@ const CapturedImageSchema = new mongoose.Schema({
   weightKg: { type: Number, default: 1.0 },
   decodedPayload: { type: mongoose.Schema.Types.Mixed },
   glmReasoning: { type: String },
+  imageUrl: { type: String },
+  cloudinaryPublicId: { type: String },
   hospitalId: { type: String, default: "H01" },
   requestId: { type: String },
   inventoryItemId: { type: String },

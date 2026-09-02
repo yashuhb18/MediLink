@@ -221,7 +221,7 @@ const db = {
   async getInventoryForHospital(hospitalId) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
       try {
-        const list = await Inventory.find({ hospitalId }).lean();
+        const list = await Inventory.find({ hospitalId }).sort({ updatedAt: -1, createdAt: -1, _id: -1 }).lean();
         if (list && list.length > 0) return list.map(toPlain);
       } catch (err) {
         console.warn('[MongoDB] getInventoryForHospital fallback:', err.message);
@@ -391,12 +391,21 @@ const db = {
 
   async createTransferRequest(data) {
     memoryDb._nextReqId++;
+    const uniqueReqId = data.id || `REQ-${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 90)}`;
     const req = {
-      id: `REQ-${memoryDb._nextReqId}`,
+      id: uniqueReqId,
       requestingHospitalId: data.requestingHospitalId,
       sourceHospitalId: data.sourceHospitalId,
       medicine: data.medicine,
       quantityKg: data.quantityKg,
+      dosageUnit: data.dosageUnit || 'Strips',
+      packageCount: data.packageCount || (data.quantityKg * 20),
+      driverMode: data.driverMode || 'SENDER_DRIVER_REQUIRED',
+      driverName: data.driverName || null,
+      driverPhone: data.driverPhone || null,
+      vehicleNumber: data.vehicleNumber || null,
+      requesterContactName: data.requesterContactName || null,
+      requesterContactPhone: data.requesterContactPhone || null,
       urgency: data.urgency || 'MEDIUM',
       reason: data.reason || '',
       status: data.status || 'PENDING_SOURCE',

@@ -12,23 +12,21 @@ const AutoScanner = {
   async processScan({ payload, rawImageId, imageBase64 }) {
     if (!payload) return { success: false, reason: "No QR payload detected" };
 
-    const {
-      token,
-      action = "TRANSFER_DISPATCH",
-      medicine = "Paracetamol 500mg",
-      batch = "PA-902",
-      weightKg = 1.0,
-      requestId,
-      sourceHospital = "H02",
-      destHospital = "H01",
-      notes
-    } = payload;
+    const action = (payload.action || "ADD").toUpperCase();
+    const medicine = payload.medicine || payload.name || "Paracetamol 500mg";
+    const batch = payload.batch || payload.batchNumber || "BATCH-2026-X902";
+    const weightKg = parseFloat(payload.weightKg || payload.weight || payload.quantity || 1.0);
+    const destHospital = payload.destHospital || payload.hospitalId || payload.targetHospital || "H01";
+    const sourceHospital = payload.sourceHospital || payload.hospitalId || "H01";
+    const requestId = payload.requestId || null;
+    const token = payload.token || null;
 
     let result = {
       action,
       medicine,
       batch,
       weightKg,
+      destHospital,
       success: true,
       message: "Optical Scan Processed Successfully",
       timestamp: new Date().toISOString()

@@ -51,11 +51,15 @@ export const transferApi = {
     if (status) params.append('status', status);
     return apiFetch(`/transfers?${params.toString()}`);
   },
+  getAvailableNodes: (medicine, requestingHospitalId) =>
+    apiFetch(`/transfers/available-nodes?medicine=${encodeURIComponent(medicine || '')}&requestingHospitalId=${requestingHospitalId || 'H01'}`),
   aiSuggest: (medicine, requiredKg, requestingHospitalId, urgency) =>
     apiFetch('/transfers/ai-suggest', { method: 'POST', body: JSON.stringify({ medicine, requiredKg, requestingHospitalId, urgency }) }),
   createTransfer: (data) => apiFetch('/transfers', { method: 'POST', body: JSON.stringify(data) }),
   acceptTransfer: (id) => apiFetch(`/transfers/${id}/accept`, { method: 'PUT' }),
   rejectTransfer: (id, reason) => apiFetch(`/transfers/${id}/reject`, { method: 'PUT', body: JSON.stringify({ reason }) }),
+  assignDriver: (id, driverData) => apiFetch(`/transfers/${id}/assign-driver`, { method: 'PUT', body: JSON.stringify(driverData) }),
+  updateTransit: (id, transitData) => apiFetch(`/transfers/${id}/update-transit`, { method: 'PUT', body: JSON.stringify(transitData) }),
   verifyTransfer: (id, scannedRfidUid, measuredWeightKg) =>
     apiFetch(`/transfers/${id}/verify`, { method: 'PUT', body: JSON.stringify({ scannedRfidUid, measuredWeightKg }) }),
   dispatchTransfer: (id) => apiFetch(`/transfers/${id}/dispatch`, { method: 'PUT' })
@@ -72,7 +76,9 @@ export const adminApi = {
   impersonate: (hospitalId, supervisorName) => apiFetch('/admin/impersonate', { method: 'POST', body: JSON.stringify({ hospitalId, supervisorName }) }),
   getAuditLog: () => apiFetch('/admin/audit-log'),
   getSensorAlerts: () => apiFetch('/admin/sensor-alerts'),
-  updateHospital: (id, updates) => apiFetch(`/hospitals/${id}`, { method: 'PUT', body: JSON.stringify(updates) })
+  updateHospital: (id, updates) => apiFetch(`/hospitals/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
+  createBatch: (data) => apiFetch('/admin/create-batch', { method: 'POST', body: JSON.stringify(data) }),
+  getConsignments: () => apiFetch('/admin/consignments')
 };
 
 export const aiApi = {
