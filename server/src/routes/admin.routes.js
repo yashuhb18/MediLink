@@ -108,13 +108,37 @@ router.post('/create-batch', async (req, res) => {
       expiryDate: expiryDate || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]
     });
 
+    // Auto-register QR Code count variable
+    await db.createOrUpdateQRCode({
+      qrId: `QR-${batch}`,
+      medicine,
+      batch,
+      count: parseInt(packageCount) || 100,
+      initialCount: parseInt(packageCount) || 100,
+      weightKg: parseFloat(weightKg) || 1.0,
+      dosageUnit,
+      hospitalId: hospitalId || 'H01',
+      action: 'ADD',
+      rawQrData: JSON.stringify({
+        qrId: `QR-${batch}`,
+        action: "ADD",
+        medicine,
+        batch,
+        count: parseInt(packageCount) || 100,
+        weightKg: parseFloat(weightKg) || 1.0,
+        destHospital: hospitalId || "H01"
+      })
+    }).catch(e => console.warn('[Admin] QRCode registration warning:', e.message));
+
     const auditDetail = `Warehouse Serialized Batch: ${medicine} (${newItem.packageCount} ${newItem.dosageUnit}, Batch: ${batch}, RFID: ${newItem.rfidUid}) allocated to ${hospitalId || 'H01'}`;
     await db.addAuditLog('FACTORY_BATCH_CREATED', auditDetail, hospitalId || 'H01', req.user.id);
 
     res.status(201).json({
       success: true,
       message: `Batch serialized as ${newItem.packageCount} ${newItem.dosageUnit} and published to network successfully!`,
-      item: newItem
+      item: newItem,
+      qrId: `QR-${batch}`,
+      count: parseInt(packageCount) || 100
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

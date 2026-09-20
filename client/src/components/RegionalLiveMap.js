@@ -74,92 +74,138 @@ export default function RegionalLiveMap() {
       document.head.appendChild(link);
     }
 
+    let resizeObserver = null;
+    let pollTimer = null;
+
     const initMap = () => {
-      if (!window.L || !mapContainerRef.current || mapInstanceRef.current) return;
+      if (!isMounted || !window.L || !mapContainerRef.current) return;
 
       const L = window.L;
 
-      // Center on Karnataka, India
-      const map = L.map(mapContainerRef.current, {
-        center: [13.2, 76.2],
-        zoom: 7,
-        zoomControl: true,
-        scrollWheelZoom: true,
-      });
-      mapInstanceRef.current = map;
+      try {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+        } else if (mapContainerRef.current._leaflet_id) {
+          mapContainerRef.current._leaflet_id = null;
+        }
 
-      // Pure OpenStreetMap India Tiles (100% Free, No Watermark, No API Key)
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19
-      }).addTo(map);
+        // Center on Karnataka, India
+        const map = L.map(mapContainerRef.current, {
+          center: [13.2, 76.2],
+          zoom: 7,
+          zoomControl: true,
+          scrollWheelZoom: true,
+        });
+        mapInstanceRef.current = map;
 
-      // Real Hospital Location Markers
-      hospitalNodes.forEach(node => {
-        const customIcon = L.divIcon({
-          className: 'real-hospital-marker',
-          html: `
-            <div style="text-align: center; transform: translate(-50%, -50%); cursor: pointer;">
-              <div style="
-                width: 38px; height: 38px; border-radius: 50%;
-                background: ${node.color};
-                border: 3px solid #ffffff;
-                box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-                display: flex; align-items: center; justify-content: center;
-                color: #ffffff; font-size: 16px; font-weight: bold;
-              ">
-                <i class="fa-solid fa-hospital"></i>
+        // Pure OpenStreetMap India Tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          subdomains: ['a', 'b', 'c'],
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 19
+        }).addTo(map);
+
+        // Real Hospital Location Markers
+        hospitalNodes.forEach(node => {
+          const customIcon = L.divIcon({
+            className: 'real-hospital-marker',
+            html: `
+              <div style="text-align: center; transform: translate(-50%, -50%); cursor: pointer;">
+                <div style="
+                  width: 38px; height: 38px; border-radius: 50%;
+                  background: ${node.color};
+                  border: 3px solid #ffffff;
+                  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+                  display: flex; align-items: center; justify-content: center;
+                  color: #ffffff; font-size: 16px; font-weight: bold;
+                ">
+                  <i class="fa-solid fa-hospital"></i>
+                </div>
+                <div style="
+                  background: #0f172a; color: #ffffff;
+                  padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;
+                  white-space: nowrap; margin-top: 4px; border: 1px solid rgba(255,255,255,0.2);
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                ">
+                  ${node.name.split(' ')[0]} (${node.id})
+                </div>
               </div>
-              <div style="
-                background: #0f172a; color: #ffffff;
-                padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;
-                white-space: nowrap; margin-top: 4px; border: 1px solid rgba(255,255,255,0.2);
-                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-              ">
-                ${node.name.split(' ')[0]} (${node.id})
+            `,
+            iconSize: [40, 40],
+            iconAnchor: [20, 20],
+          });
+
+          const marker = L.marker([node.lat, node.lng], { icon: customIcon }).addTo(map);
+
+          marker.on('click', () => {
+            setSelectedHospital(node);
+            map.flyTo([node.lat, node.lng], 11, { duration: 1.0 });
+          });
+
+          const popupContent = `
+            <div style="font-family: system-ui, sans-serif; padding: 6px; min-width: 220px;">
+              <strong style="color: #0f172a; font-size: 14px;">${node.name}</strong>
+              <div style="font-size: 11px; color: #64748b; margin-top: 3px;">${node.address}</div>
+              <div style="margin-top: 8px; font-size: 12px; font-weight: 700; color: ${node.color};">
+                Status: ${node.status} • Karma: ${node.karma} pts
+              </div>
+              <div style="font-size: 11px; color: #008b8b; font-weight: 600; margin-top: 4px;">
+                Stock: ${node.stock}
               </div>
             </div>
-          `,
-          iconSize: [40, 40],
-          iconAnchor: [20, 20],
+          `;
+          marker.bindPopup(popupContent);
         });
 
-        const marker = L.marker([node.lat, node.lng], { icon: customIcon }).addTo(map);
+        // Trigger size invalidation to fill container
+        setTimeout(() => { if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize(); }, 60);
+        setTimeout(() => { if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize(); }, 300);
 
-        marker.on('click', () => {
-          setSelectedHospital(node);
-          map.flyTo([node.lat, node.lng], 11, { duration: 1.0 });
-        });
-
-        const popupContent = `
-          <div style="font-family: system-ui, sans-serif; padding: 6px; min-width: 220px;">
-            <strong style="color: #0f172a; font-size: 14px;">${node.name}</strong>
-            <div style="font-size: 11px; color: #64748b; margin-top: 3px;">${node.address}</div>
-            <div style="margin-top: 8px; font-size: 12px; font-weight: 700; color: ${node.color};">
-              Status: ${node.status} • Karma: ${node.karma} pts
-            </div>
-            <div style="font-size: 11px; color: #008b8b; font-weight: 600; margin-top: 4px;">
-              Stock: ${node.stock}
-            </div>
-          </div>
-        `;
-        marker.bindPopup(popupContent);
-      });
+        if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
+          resizeObserver = new ResizeObserver(() => {
+            if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
+          });
+          resizeObserver.observe(mapContainerRef.current);
+        }
+      } catch (err) {
+        console.warn('Regional map init notice:', err);
+      }
     };
 
-    // Load Leaflet script
-    if (!window.L) {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.async = true;
-      script.onload = initMap;
-      document.body.appendChild(script);
-    } else {
+    if (window.L) {
       initMap();
+    } else {
+      let script = document.getElementById('leaflet-script');
+      if (!script) {
+        script = document.createElement('script');
+        script.id = 'leaflet-script';
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.async = true;
+        document.body.appendChild(script);
+      }
+      script.addEventListener('load', () => {
+        if (isMounted) initMap();
+      });
+
+      let elapsed = 0;
+      pollTimer = setInterval(() => {
+        elapsed += 50;
+        if (window.L) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          if (isMounted) initMap();
+        } else if (elapsed > 5000) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }, 50);
     }
 
     return () => {
       isMounted = false;
+      if (pollTimer) clearInterval(pollTimer);
+      if (resizeObserver) resizeObserver.disconnect();
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;

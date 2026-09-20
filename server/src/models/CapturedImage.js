@@ -11,6 +11,7 @@ const CapturedImageSchema = new mongoose.Schema({
   glmReasoning: { type: String },
   imageUrl: { type: String },
   cloudinaryPublicId: { type: String },
+  deviceName: { type: String, default: "Node_1" },
   hospitalId: { type: String, default: "H01" },
   requestId: { type: String },
   inventoryItemId: { type: String },

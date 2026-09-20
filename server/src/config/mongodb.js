@@ -11,10 +11,16 @@ try {
   // Ignore if custom DNS cannot be set
 }
 
-let isConnected = false;
+let connectionPromise = null;
 
 const connectMongoDB = async () => {
-  if (isConnected) return mongoose.connection;
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+
+  if (connectionPromise) {
+    return connectionPromise;
+  }
 
   const uri = process.env.MONGODB_URI;
   if (!uri) {
@@ -22,17 +28,24 @@ const connectMongoDB = async () => {
     return null;
   }
 
-  try {
-    const conn = await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 10000,
-    });
-    isConnected = true;
-    console.log(`[MongoDB Atlas] Connected successfully to cluster: ${conn.connection.host}`);
-    return conn.connection;
-  } catch (err) {
-    console.error('[MongoDB Atlas] Connection failed:', err.message);
-    throw err;
-  }
+  connectionPromise = (async () => {
+    try {
+      const conn = await mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 15000,
+        connectTimeoutMS: 15000,
+      });
+      const host = conn.connection.host || conn.connection.name || 'Atlas Cluster';
+      console.log(`[MongoDB Atlas] Connected successfully to cluster: ${host}`);
+      return conn.connection;
+    } catch (err) {
+      connectionPromise = null;
+      console.error('[MongoDB Atlas] Connection failed:', err.message);
+      throw err;
+    }
+  })();
+
+  return connectionPromise;
 };
 
 module.exports = { connectMongoDB, mongoose };
+

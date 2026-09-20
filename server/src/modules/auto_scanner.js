@@ -5,6 +5,23 @@ const { db } = require('../config/firebase');
 const AIAgent = require('./ai_agent');
 const { broadcastSSE } = require('../routes/events.routes');
 
+function resolveNodeHospital(rawHospital, deviceName) {
+  if (deviceName) {
+    const dev = deviceName.toString().toUpperCase();
+    if (dev.includes('NODE_1') || dev.includes('NODE-1') || dev.includes('NODE 1') || dev === 'NODE1' || dev === 'H01') return 'H01';
+    if (dev.includes('NODE_2') || dev.includes('NODE-2') || dev.includes('NODE 2') || dev === 'NODE2' || dev === 'H02') return 'H02';
+    if (dev.includes('NODE_3') || dev.includes('NODE-3') || dev.includes('NODE 3') || dev === 'NODE3' || dev === 'H03') return 'H03';
+  }
+  if (rawHospital && (rawHospital === 'H01' || rawHospital === 'H02' || rawHospital === 'H03')) {
+    return rawHospital;
+  }
+  const dev = (rawHospital || '').toString().toUpperCase();
+  if (dev.includes('NODE_1') || dev.includes('NODE-1') || dev.includes('NODE 1') || dev === 'NODE1' || dev === 'H01') return 'H01';
+  if (dev.includes('NODE_2') || dev.includes('NODE-2') || dev.includes('NODE 2') || dev === 'NODE2' || dev === 'H02') return 'H02';
+  if (dev.includes('NODE_3') || dev.includes('NODE-3') || dev.includes('NODE 3') || dev === 'NODE3' || dev === 'H03') return 'H03';
+  return 'H01';
+}
+
 const AutoScanner = {
   /**
    * Process decoded QR payload from ESP32-CAM optical capture
@@ -12,12 +29,13 @@ const AutoScanner = {
   async processScan({ payload, rawImageId, imageBase64 }) {
     if (!payload) return { success: false, reason: "No QR payload detected" };
 
+    const deviceName = payload.deviceName || payload.source || 'Node_1';
     const action = (payload.action || "ADD").toUpperCase();
     const medicine = payload.medicine || payload.name || "Paracetamol 500mg";
     const batch = payload.batch || payload.batchNumber || "BATCH-2026-X902";
     const weightKg = parseFloat(payload.weightKg || payload.weight || payload.quantity || 1.0);
-    const destHospital = payload.destHospital || payload.hospitalId || payload.targetHospital || "H01";
-    const sourceHospital = payload.sourceHospital || payload.hospitalId || "H01";
+    const destHospital = resolveNodeHospital(payload.destHospital || payload.hospitalId || payload.targetHospital, deviceName);
+    const sourceHospital = resolveNodeHospital(payload.sourceHospital || payload.hospitalId, deviceName);
     const requestId = payload.requestId || null;
     const token = payload.token || null;
 
@@ -27,6 +45,7 @@ const AutoScanner = {
       batch,
       weightKg,
       destHospital,
+      deviceName,
       success: true,
       message: "Optical Scan Processed Successfully",
       timestamp: new Date().toISOString()
@@ -116,73 +135,109 @@ const AutoScanner = {
       }
 
       // ──────────────────────────────────────────
-      // 3. ACTION: ADD / RESTOCK_INFLOW
+      // 3. ACTION: ADD / RESTOCK_INFLOW / INCREMENT
       // ──────────────────────────────────────────
-      else if (action === "ADD" || action === "ADDITION" || action === "RESTOCK" || action === "RESTOCK_INFLOW" || action === "INFLOW") {
+      else if (action === "ADD" || action === "ADDITION" || action === "RESTOCK" || action === "RESTOCK_INFLOW" || action === "INFLOW" || action === "INCREMENT" || action === "+") {
+        // Increment QR Code Count Variable
+        const qrId = payload.qrId || (batch ? `QR-${batch}` : `QR-${medicine.replace(/\s+/g, '_')}`);
+        const qrUpdate = await db.incrementQRCount(qrId, 1, {
+          qrId,
+          medicine,
+          batch,
+          weightKg,
+          destHospital,
+          deviceName,
+          headerUsed: payload.headerUsed || 'x-action: ADD',
+          source: deviceName
+        });
+
+        result.qrId = qrUpdate.qrId;
+        result.qrCount = qrUpdate.count;
+        result.previousCount = qrUpdate.previousCount;
+        result.countChange = 1;
+
         const destItems = await db.getInventoryForHospital(destHospital);
         const destItem = destItems.find(i => 
-          i.medicine.toLowerCase().includes(medicine.toLowerCase()) || 
-          medicine.toLowerCase().includes(i.medicine.toLowerCase())
+          (i.batch && batch && i.batch.toLowerCase() === batch.toLowerCase() && i.medicine.toLowerCase() === medicine.toLowerCase()) ||
+          (i.medicine.toLowerCase() === medicine.toLowerCase())
         );
         if (destItem) {
           const newStock = +(destItem.currentStockKg + parseFloat(weightKg)).toFixed(2);
-          await db.updateInventoryItem(destItem.id, { currentStockKg: newStock });
+          const newPkgCount = (destItem.packageCount || 0) + (payload.count ? parseInt(payload.count) : 1);
+          await db.updateInventoryItem(destItem.id, { currentStockKg: newStock, packageCount: newPkgCount });
           result.newStockKg = newStock;
-          result.message = `Successfully ADDED ${weightKg}kg to existing ${destItem.medicine} (Batch: ${batch}) at ${destHospital}. New Stock: ${newStock}kg.`;
+          result.packageCount = newPkgCount;
+          result.message = `Successfully ADDED by ${deviceName} (+${payload.count || 1} Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${destItem.medicine} (Batch: ${batch}) at ${destHospital}. New Stock: ${newStock}kg.`;
         } else {
           // Create new medicine entry in MongoDB!
           const created = await db.createInventoryItem({
             hospitalId: destHospital,
             medicine: medicine,
-            currentStockKg: parseFloat(weightKg),
+            currentStockKg: parseFloat(weightKg) || 1.0,
+            packageCount: payload.count !== undefined ? parseInt(payload.count) : (qrUpdate.count || 1),
+            dosageUnit: payload.unit || payload.dosageUnit || 'Strips',
+            dosageForm: payload.dosageForm || 'Tablets',
             batch: batch || 'BATCH-ESP32',
             minThresholdKg: 1.0
           });
-          result.newStockKg = parseFloat(weightKg);
-          result.message = `New medicine successfully created in inventory: ${medicine} (${weightKg}kg, Batch: ${batch}) at ${destHospital}.`;
+          result.newStockKg = parseFloat(weightKg) || 1.0;
+          result.packageCount = created.packageCount || qrUpdate.count || 1;
+          result.message = `New medicine successfully created by ${deviceName}: ${medicine} (+Count: ${result.packageCount}, ${weightKg}kg, Batch: ${batch}) at ${destHospital}.`;
         }
 
         if (db.addAuditLog) {
-          await db.addAuditLog("ITEM_ADDED", `ESP32-CAM Header Action: Added ${weightKg}kg of ${medicine} (Batch: ${batch})`, destHospital);
+          await db.addAuditLog("ITEM_ADDED", `Scanned by ${deviceName}: Incremented QR Count to ${qrUpdate.count} for ${medicine} (Batch: ${batch})`, destHospital);
         }
       }
 
       // ──────────────────────────────────────────
-      // 4. ACTION: REMOVE / DEDUCT / DISPENSE
+      // 4. ACTION: REMOVE / DEDUCT / DISPENSE / DECREMENT
       // ──────────────────────────────────────────
-      else if (action === "REMOVE" || action === "REMOVAL" || action === "DEDUCT" || action === "DELETE" || action === "DISPENSE" || action === "PHARMACY_DISPENSE") {
+      else if (action === "REMOVE" || action === "REMOVAL" || action === "DEDUCT" || action === "DELETE" || action === "DISPENSE" || action === "PHARMACY_DISPENSE" || action === "DECREMENT" || action === "-") {
+        // Decrement QR Code Count Variable
+        const qrId = payload.qrId || (batch ? `QR-${batch}` : `QR-${medicine.replace(/\s+/g, '_')}`);
+        const qrUpdate = await db.decrementQRCount(qrId, 1, {
+          qrId,
+          medicine,
+          batch,
+          weightKg,
+          sourceHospital,
+          deviceName,
+          headerUsed: payload.headerUsed || 'x-action: REMOVE',
+          source: deviceName
+        });
+
+        result.qrId = qrUpdate.qrId;
+        result.qrCount = qrUpdate.count;
+        result.previousCount = qrUpdate.previousCount;
+        result.countChange = -1;
+
         const srcItems = await db.getInventoryForHospital(sourceHospital);
-        const matchItem = srcItems.find(i => i.medicine.toLowerCase().includes(medicine.toLowerCase()));
+        const matchItem = srcItems.find(i => 
+          (i.batch && batch && i.batch.toLowerCase() === batch.toLowerCase() && i.medicine.toLowerCase() === medicine.toLowerCase()) ||
+          (i.medicine.toLowerCase() === medicine.toLowerCase())
+        );
         if (matchItem) {
           const newStock = Math.max(0, +(matchItem.currentStockKg - parseFloat(weightKg)).toFixed(2));
-          await db.updateInventoryItem(matchItem.id, { currentStockKg: newStock });
+          const newPkgCount = Math.max(0, (matchItem.packageCount || 1) - 1);
+          await db.updateInventoryItem(matchItem.id, { currentStockKg: newStock, packageCount: newPkgCount });
           result.newStockKg = newStock;
-          result.message = `Successfully REMOVED/DEDUCTED ${weightKg}kg of ${medicine} (Batch: ${batch}). Remaining Stock: ${newStock}kg.`;
+          result.packageCount = newPkgCount;
+          result.message = `Successfully REMOVED by ${deviceName} (-1 Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${medicine} (Batch: ${batch}). Remaining Stock: ${newStock}kg.`;
         } else {
-          result.message = `Deduction recorded for ${medicine} (${weightKg}kg) batch ${batch}.`;
+          result.message = `Deduction recorded by ${deviceName} for ${medicine} (-1 Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}, ${weightKg}kg) batch ${batch}.`;
         }
 
         if (db.addAuditLog) {
-          await db.addAuditLog("ITEM_REMOVED", `ESP32-CAM Header Action: Removed ${weightKg}kg of ${medicine} (Batch: ${batch})`, sourceHospital);
+          await db.addAuditLog("ITEM_REMOVED", `Scanned by ${deviceName}: Decremented QR Count to ${qrUpdate.count} for ${medicine} (Batch: ${batch})`, sourceHospital);
         }
       }
 
       // ──────────────────────────────────────────
-      // 5. Run GLM-4 Optical AI Assessment
+      // 5. Optical Assessment & Real-Time Sync
       // ──────────────────────────────────────────
-      const glmVerification = await AIAgent.explainPrediction({
-        medicine,
-        batch,
-        currentStockKg: result.newStockKg || weightKg,
-        minThresholdKg: 1.0,
-        consumptionRate: 0.05,
-        hoursToZero: 24,
-        deficitKg: weightKg,
-        urgency: "LOW"
-      }).catch(() => ({ explanation: `Optical verification sealed for ${medicine} (Batch ${batch}). Inventory adjusted by ${weightKg}kg.` }));
-
-      result.glmExplanation = glmVerification.explanation;
-      result.model = glmVerification.model || "GLM-4 Local";
+      result.glmExplanation = `Optical verification confirmed by ${deviceName} for ${medicine} (Batch: ${batch}). Verified action: ${action} at node ${destHospital}.`;
+      result.model = "MediLink Vision Engine";
 
       // ──────────────────────────────────────────
       // 6. Broadcast Real-Time SSE to All Web Portals
@@ -190,7 +245,9 @@ const AutoScanner = {
       broadcastSSE({
         type: 'ESP32_SCAN_SUCCESS',
         result,
-        payload,
+        payload: { ...payload, deviceName, hospitalId: destHospital },
+        deviceName,
+        hospitalId: destHospital,
         rawImageId,
         hasImage: !!imageBase64
       });

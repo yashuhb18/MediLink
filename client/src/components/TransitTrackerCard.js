@@ -1,117 +1,221 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { transferApi } from '@/lib/api';
-
-const FACILITY_CONTACTS = {
-  H01: { name: 'Dr. Ramesh Kumar (ICU Incharge)', phone: '+91 98450 12345', hospital: 'Apollo Hospital (Mysore)' },
-  H02: { name: 'Dr. Ananya Sharma (Chief Pharmacist)', phone: '+91 98800 67890', hospital: 'Bangalore Medical Center (BMC)' },
-  H03: { name: 'Dr. Vikram Pai (Clinical Lead)', phone: '+91 99001 23456', hospital: 'Mangalore General Hospital' }
-};
+import { QRCodeSVG } from 'qrcode.react';
 
 export default function TransitTrackerCard({ transfer, onUpdate, userRole = 'REQUESTING_SUPERVISOR' }) {
-  const [isLiveActive, setIsLiveActive] = useState(true);
-  const [localProgress, setLocalProgress] = useState(
-    transfer?.transitGps?.progressPercent !== undefined ? transfer.transitGps.progressPercent : 15
-  );
-  const [localSpeed, setLocalSpeed] = useState(transfer?.transitGps?.currentSpeedKmH || 56);
-  const [localTemp, setLocalTemp] = useState(transfer?.transitGps?.temperatureC || 3.9);
-  const [localEta, setLocalEta] = useState(transfer?.transitGps?.etaMinutes || 35);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [phoneGpsActive, setPhoneGpsActive] = useState(false);
+
+  // Real GPS Telemetry State
+  const [localCoords, setLocalCoords] = useState({
+    lat: transfer?.transitGps?.lat || null,
+    lng: transfer?.transitGps?.lng || null
+  });
+  const [localSpeed, setLocalSpeed] = useState(transfer?.transitGps?.currentSpeedKmH || 0);
+  const [localAccuracy, setLocalAccuracy] = useState(transfer?.transitGps?.accuracy || null);
+  const [localTemp, setLocalTemp] = useState(transfer?.transitGps?.temperatureC || 3.8);
   const [localLocation, setLocalLocation] = useState(
-    transfer?.transitGps?.currentLocationName || `Departed ${transfer?.sourceHospitalId || 'Donor'} Dispatch Bay`
+    transfer?.transitGps?.currentLocationName || 'Awaiting Live GPS stream from Driver Smartphone...'
   );
+  const [lastPacketTime, setLastPacketTime] = useState(null);
+  const [packetCount, setPacketCount] = useState(0);
+
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef = useRef(null);
+  const accuracyCircleRef = useRef(null);
+  const pathHistoryRef = useRef([]);
+  const pathPolylineRef = useRef(null);
 
   if (!transfer) return null;
 
-  const donorContact = FACILITY_CONTACTS[transfer.sourceHospitalId] || FACILITY_CONTACTS.H01;
-  const requesterContact = FACILITY_CONTACTS[transfer.requestingHospitalId] || FACILITY_CONTACTS.H02;
+  const driverName = transfer.driverName || 'Suresh Kumar (Ambulance Fleet)';
+  const driverPhone = transfer.driverPhone || '+91 98455 12345';
+  const vehicleNo = transfer.vehicleNumber || 'KA-09-EA-4421';
 
-  const driverName = transfer.driverName || (transfer.driverMode === 'REQUESTER_DRIVER' ? 'Suresh Kumar (Ambulance Fleet)' : 'Ramesh Gowda (Express Pilot)');
-  const driverPhone = transfer.driverPhone || (transfer.driverMode === 'REQUESTER_DRIVER' ? '+91 98455 12345' : '+91 98800 67890');
-  const vehicleNo = transfer.vehicleNumber || (transfer.driverMode === 'REQUESTER_DRIVER' ? 'KA-09-EA-4421' : 'KA-01-MD-9901');
+  // Public Cloudflare tunnel driver app URL (works on any smartphone over 4G/WiFi)
+  const tunnelDriverUrl = 'https://tommy-cost-hear-vice.trycloudflare.com/driver';
+  const driverAppUrl = typeof window !== 'undefined'
+    ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? `${tunnelDriverUrl}?req=${transfer.id}`
+      : `${window.location.origin}/driver?req=${transfer.id}`
+    : `${tunnelDriverUrl}?req=${transfer.id}`;
 
-  // Real-Time Automated GPS Heartbeat
+  // 1. Listen to Real-Time SSE Stream for TRUE Hardware Coordinates
   useEffect(() => {
-    if (!isLiveActive || localProgress >= 100) return;
-
-    const interval = setInterval(() => {
-      setLocalProgress(prev => {
-        const next = Math.min(100, prev + 3);
-        const speed = next >= 100 ? 0 : Math.floor(52 + Math.random() * 14);
-        const temp = +(3.8 + (Math.random() * 0.4 - 0.2)).toFixed(1);
-        const eta = Math.max(0, Math.round(40 * (1 - next / 100)));
-
-        let loc = `En-route from ${transfer.sourceHospitalId} to ${transfer.requestingHospitalId}`;
-        if (next < 20) loc = `${transfer.sourceHospitalId} Packaging Checkpoint`;
-        else if (next < 45) loc = 'Highway NH-275 · Mandya Transit Corridor';
-        else if (next < 75) loc = 'NH-275 Highway · Ramanagara Express Way';
-        else if (next < 98) loc = `Approaching ${transfer.requestingHospitalId} City Perimeter`;
-        else loc = `Arrived at ${transfer.requestingHospitalId} Emergency Receiving Bay`;
-
-        setLocalSpeed(speed);
-        setLocalTemp(temp);
-        setLocalEta(eta);
-        setLocalLocation(loc);
-
-        // Sync to backend periodically
-        if (next % 12 === 0 || next === 100) {
-          transferApi.updateTransit(transfer.id, {
-            progressPercent: next,
-            currentSpeedKmH: speed,
-            temperatureC: temp,
-            etaMinutes: eta,
-            currentLocationName: loc,
-            liveTrackingStatus: next >= 100 ? 'ARRIVED_AT_DOCK' : 'IN_TRANSIT'
-          }).catch(() => {});
-        }
-
-        return next;
-      });
-    }, 3500);
-
-    return () => clearInterval(interval);
-  }, [isLiveActive, localProgress, transfer]);
-
-  const isDelivered = localProgress >= 100 || transfer.status === 'DELIVERED';
-  const isArrived = localProgress >= 95 && !isDelivered;
-
-  const handleConfirmArrival = async () => {
+    let es;
     try {
-      setLocalProgress(100);
-      setLocalSpeed(0);
-      setLocalEta(0);
-      setLocalLocation(`Arrived at ${transfer.requestingHospitalId} Emergency Bay`);
-      await transferApi.updateTransit(transfer.id, {
-        progressPercent: 100,
-        currentSpeedKmH: 0,
-        temperatureC: 3.8,
-        etaMinutes: 0,
-        currentLocationName: `Arrived at ${transfer.requestingHospitalId} Emergency Bay`,
-        liveTrackingStatus: 'ARRIVED_AT_DOCK'
-      });
-      alert(`✅ Consignment ${transfer.id} confirmed arrived at ${transfer.requestingHospitalId}! Ready for physical verification.`);
-      if (onUpdate) onUpdate();
-    } catch (err) {
-      alert(`Error: ${err.message}`);
+      es = new EventSource('http://localhost:5000/api/events');
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'TRANSIT_GPS_UPDATED' && (!data.requestId || data.requestId === transfer.id)) {
+            const gps = data.transitGps;
+            if (gps && gps.lat && gps.lng) {
+              setPhoneGpsActive(true);
+              setLocalCoords({ lat: gps.lat, lng: gps.lng });
+              if (gps.currentSpeedKmH !== undefined) setLocalSpeed(gps.currentSpeedKmH);
+              if (gps.accuracy !== undefined) setLocalAccuracy(gps.accuracy);
+              if (gps.temperatureC !== undefined) setLocalTemp(gps.temperatureC);
+              if (gps.currentLocationName) setLocalLocation(gps.currentLocationName);
+
+              setPacketCount(c => c + 1);
+              setLastPacketTime(new Date().toLocaleTimeString());
+
+              // Update Leaflet Map dynamically to exact real coordinates
+              if (mapInstanceRef.current) {
+                // Fly to real street level coordinates
+                mapInstanceRef.current.flyTo([gps.lat, gps.lng], 17, { duration: 1.0 });
+
+                if (markerRef.current) {
+                  markerRef.current.setLatLng([gps.lat, gps.lng]);
+                } else if (window.L) {
+                  const L = window.L;
+                  const icon = L.divIcon({
+                    className: 'live-ambulance-marker',
+                    html: `
+                      <div style="position:relative; display:flex; align-items:center; justify-content:center; transform:translate(-50%, -50%);">
+                        <div style="position:absolute; width:44px; height:44px; border-radius:50%; background:rgba(16, 185, 129, 0.35); animation:pulse 1.8s infinite;"></div>
+                        <div style="width:34px; height:34px; border-radius:50%; background:#0f172a; border:3px solid #ffffff; box-shadow:0 4px 14px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:15px;">
+                          🚑
+                        </div>
+                      </div>
+                    `,
+                    iconSize: [44, 44],
+                    iconAnchor: [22, 22]
+                  });
+                  markerRef.current = L.marker([gps.lat, gps.lng], { icon }).addTo(mapInstanceRef.current);
+                }
+
+                // Accuracy circle
+                if (accuracyCircleRef.current) {
+                  accuracyCircleRef.current.setLatLng([gps.lat, gps.lng]);
+                  accuracyCircleRef.current.setRadius(Math.max(10, gps.accuracy || 15));
+                }
+
+                // Real walking path trail
+                if (pathPolylineRef.current) {
+                  pathHistoryRef.current.push([gps.lat, gps.lng]);
+                  pathPolylineRef.current.setLatLngs(pathHistoryRef.current);
+                }
+              }
+            }
+          }
+        } catch (e) {}
+      };
+    } catch (e) {}
+
+    return () => {
+      if (es) es.close();
+    };
+  }, [transfer.id]);
+
+  // 2. Initialize Street-Level Leaflet Map
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
     }
-  };
+
+    const initMap = () => {
+      if (!window.L || !mapContainerRef.current || mapInstanceRef.current) return;
+      const L = window.L;
+
+      const initialLat = localCoords.lat || 12.9716;
+      const initialLng = localCoords.lng || 77.5946;
+
+      const map = L.map(mapContainerRef.current, {
+        center: [initialLat, initialLng],
+        zoom: localCoords.lat ? 17 : 13,
+        zoomControl: true
+      });
+      mapInstanceRef.current = map;
+
+      // Clean OpenStreetMap tiles
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Accuracy circle
+      const circle = L.circle([initialLat, initialLng], {
+        radius: 20,
+        color: '#10b981',
+        fillColor: '#34d399',
+        fillOpacity: 0.18,
+        weight: 1.5
+      }).addTo(map);
+      accuracyCircleRef.current = circle;
+
+      // Real vehicle marker
+      const icon = L.divIcon({
+        className: 'live-ambulance-marker',
+        html: `
+          <div style="position:relative; display:flex; align-items:center; justify-content:center; transform:translate(-50%, -50%);">
+            <div style="position:absolute; width:44px; height:44px; border-radius:50%; background:rgba(16, 185, 129, 0.35); animation:pulse 1.8s infinite;"></div>
+            <div style="width:34px; height:34px; border-radius:50%; background:#0f172a; border:3px solid #ffffff; box-shadow:0 4px 14px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:15px;">
+              🚑
+            </div>
+          </div>
+        `,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22]
+      });
+
+      markerRef.current = L.marker([initialLat, initialLng], { icon }).addTo(map);
+
+      // Breadcrumb polyline
+      pathHistoryRef.current = [[initialLat, initialLng]];
+      pathPolylineRef.current = L.polyline(pathHistoryRef.current, {
+        color: '#0f172a',
+        weight: 4,
+        opacity: 0.85
+      }).addTo(map);
+    };
+
+    if (!window.L) {
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.async = true;
+      script.onload = initMap;
+      document.body.appendChild(script);
+    } else {
+      initMap();
+    }
+
+    return () => {
+      isMounted = false;
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div style={{
       background: '#ffffff',
-      borderRadius: '16px',
+      borderRadius: '20px',
       border: '1.5px solid #e2e8f0',
-      padding: '20px',
-      boxShadow: '0 8px 30px rgba(0,0,0,0.04)',
-      marginBottom: '16px'
+      padding: '22px',
+      boxShadow: '0 8px 30px rgba(0,0,0,0.05)',
+      marginBottom: '22px',
+      position: 'relative'
     }}>
       {/* Header Strip */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '14px', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px', marginBottom: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{
-              background: isDelivered ? '#ecfdf5' : isArrived ? '#fef3c7' : '#e6f7f6',
-              color: isDelivered ? '#059669' : isArrived ? '#d97706' : '#008b8b',
-              padding: '4px 10px',
+              background: phoneGpsActive ? '#ecfdf5' : '#f1f5f9',
+              color: phoneGpsActive ? '#059669' : '#64748b',
+              padding: '4px 12px',
               borderRadius: '999px',
               fontSize: '0.74rem',
               fontWeight: 800,
@@ -120,254 +224,185 @@ export default function TransitTrackerCard({ transfer, onUpdate, userRole = 'REQ
               gap: '6px'
             }}>
               <span style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                background: isDelivered ? '#059669' : isArrived ? '#d97706' : '#008b8b',
-                boxShadow: isDelivered ? 'none' : '0 0 8px currentColor'
-              }} className={isDelivered ? '' : 'pulse-dot-teal'}></span>
-              {isDelivered ? 'DELIVERED & ARRIVED' : isArrived ? 'ARRIVED AT RECEIVING DOCK' : 'LIVE IN-TRANSIT (GPS STREAMING)'}
+                width: '7px', height: '7px', borderRadius: '50%',
+                background: phoneGpsActive ? '#10b981' : '#94a3b8',
+                boxShadow: phoneGpsActive ? '0 0 8px #10b981' : 'none'
+              }}></span>
+              {phoneGpsActive ? '🟢 REAL HARDWARE GPS CONNECTED' : 'STANDBY · AWAITING DRIVER GPS'}
             </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', fontWeight: 800, color: '#64748b' }}>
+            <span style={{ fontFamily: 'monospace', fontSize: '0.82rem', fontWeight: 800, color: '#64748b' }}>
               {transfer.id}
             </span>
           </div>
-          <h4 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', marginTop: '6px', margin: '6px 0 0 0' }}>
-            {transfer.medicine} · <span style={{ color: '#008b8b' }}>{transfer.packageCount || (transfer.quantityKg * 20)} {transfer.dosageUnit || 'Strips'}</span>
-            <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginLeft: '8px' }}>({transfer.quantityKg} kg gross)</span>
+
+          <h4 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', margin: '6px 0 2px 0' }}>
+            {transfer.medicine} · <span style={{ color: '#008b8b' }}>{transfer.quantityKg} kg</span>
           </h4>
         </div>
 
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '1.35rem', fontWeight: 900, color: isDelivered ? '#059669' : '#0f172a', fontFamily: 'var(--font-mono)' }}>
-            {isDelivered ? '0m (Arrived)' : `${localEta} mins ETA`}
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700 }}>
-            {transfer.sourceHospitalId} ➔ {transfer.requestingHospitalId}
-          </div>
-        </div>
-      </div>
-
-      {/* Visual Live Route Progress Bar */}
-      <div style={{ marginBottom: '20px', padding: '16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.82rem', fontWeight: 800, color: '#0f172a' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <i className="fa-solid fa-hospital" style={{ color: '#64748b' }}></i>
-            Donor Node: <strong>{transfer.sourceHospitalId}</strong>
-          </div>
-          <div style={{ color: '#008b8b', fontFamily: 'var(--font-mono)' }}>
-            <i className="fa-solid fa-location-arrow fa-fade"></i> {localLocation} ({localProgress}%)
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <i className="fa-solid fa-truck-medical" style={{ color: '#008b8b' }}></i>
-            Destination: <strong>{transfer.requestingHospitalId}</strong>
-          </div>
-        </div>
-
-        {/* Progress Line */}
-        <div style={{ width: '100%', height: '10px', background: '#e2e8f0', borderRadius: '999px', overflow: 'hidden' }}>
-          <div style={{
-            width: `${localProgress}%`,
-            height: '100%',
-            background: isDelivered ? '#10b981' : 'linear-gradient(90deg, #008b8b 0%, #10b981 100%)',
-            transition: 'width 0.6s ease',
-            borderRadius: '999px'
-          }} />
-        </div>
-      </div>
-
-      {/* Real-Time Live Telemetry Metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
-        <div style={{ padding: '12px 16px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-          <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Fleet Speed</div>
-          <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <i className="fa-solid fa-gauge-high" style={{ color: '#008b8b', fontSize: '0.9rem' }}></i>
-            <span className="mono">{localSpeed} km/h</span>
-          </div>
-        </div>
-
-        <div style={{ padding: '12px 16px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-          <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Cold-Chain Sensor</div>
-          <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#059669', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <i className="fa-solid fa-snowflake" style={{ color: '#0284c7', fontSize: '0.9rem' }}></i>
-            <span className="mono">{localTemp}°C</span>
-            <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 700 }}>● Safe</span>
-          </div>
-        </div>
-
-        <div style={{ padding: '12px 16px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-          <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Transport Mode</div>
-          <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', marginTop: '4px' }}>
-            {transfer.driverMode === 'REQUESTER_DRIVER' ? '🚑 Requester Ambulance' : '🚛 Donor Express Fleet'}
-          </div>
-        </div>
-      </div>
-
-      {/* Driver & Facility Contact Cards (True Live Data) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px', marginBottom: '14px' }}>
-        {/* Assigned Driver Card */}
-        <div style={{
-          padding: '14px',
-          borderRadius: '12px',
-          border: '1.5px solid #cbd5e1',
-          background: '#ffffff',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              background: '#e6f7f6',
-              color: '#008b8b',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1.1rem'
-            }}>
-              <i className="fa-solid fa-id-card"></i>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Assigned Driver & Vehicle</div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#0f172a' }}>{driverName}</div>
-              <div style={{ fontSize: '0.75rem', color: '#008b8b', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-                {vehicleNo} · {driverPhone}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <a
-              href={`tel:${driverPhone}`}
-              style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '50%',
-                background: '#f1f5f9',
-                border: '1px solid #cbd5e1',
-                color: '#008b8b',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textDecoration: 'none',
-                fontSize: '0.85rem'
-              }}
-              title="Call Driver"
-            >
-              <i className="fa-solid fa-phone"></i>
-            </a>
-            <a
-              href={`https://wa.me/${driverPhone.replace(/[^0-9]/g, '')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '50%',
-                background: '#ecfdf5',
-                border: '1px solid #a7f3d0',
-                color: '#059669',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textDecoration: 'none',
-                fontSize: '0.85rem'
-              }}
-              title="WhatsApp Live Chat"
-            >
-              <i className="fa-brands fa-whatsapp"></i>
-            </a>
-          </div>
-        </div>
-
-        {/* Facility Incharge Contact Card (Exact Authentic Facility Contact) */}
-        <div style={{
-          padding: '14px',
-          borderRadius: '12px',
-          border: '1.5px solid #cbd5e1',
-          background: '#ffffff',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              background: '#fef3c7',
-              color: '#d97706',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1.1rem'
-            }}>
-              <i className="fa-solid fa-user-doctor"></i>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
-                Donor Facility Incharge ({transfer.sourceHospitalId})
-              </div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#0f172a' }}>{donorContact.name}</div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
-                {donorContact.phone}
-              </div>
-            </div>
-          </div>
-
-          <a
-            href={`tel:${donorContact.phone}`}
-            style={{
-              width: '34px',
-              height: '34px',
-              borderRadius: '50%',
-              background: '#fffbeb',
-              border: '1px solid #fde68a',
-              color: '#d97706',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textDecoration: 'none',
-              fontSize: '0.85rem'
-            }}
-            title="Call Facility Incharge"
-          >
-            <i className="fa-solid fa-phone"></i>
-          </a>
-        </div>
-      </div>
-
-      {/* Footer Controls */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
-        <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <i className="fa-solid fa-satellite" style={{ color: isLiveActive ? '#10b981' : '#94a3b8' }}></i>
-          <span>Live GPS stream {isLiveActive ? 'updating automatically every 3.5s' : 'paused'}</span>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setIsLiveActive(!isLiveActive)}
-            style={{ fontSize: '0.75rem', fontWeight: 700 }}
+            onClick={() => setShowQrModal(true)}
+            className="btn btn-sm"
+            style={{
+              background: '#0f172a',
+              color: '#ffffff',
+              borderRadius: '12px',
+              border: 'none',
+              padding: '9px 14px',
+              fontSize: '0.8rem',
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)',
+              cursor: 'pointer'
+            }}
           >
-            <i className={`fa-solid ${isLiveActive ? 'fa-pause' : 'fa-play'}`}></i> {isLiveActive ? 'Pause Telemetry' : 'Resume Telemetry'}
+            📱 Scan Phone GPS Transponder
           </button>
-
-          {!isDelivered && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={handleConfirmArrival}
-              style={{ fontWeight: 800, background: '#059669', borderColor: '#047857' }}
-            >
-              <i className="fa-solid fa-flag-checkered"></i> Mark Consignment Arrived
-            </button>
-          )}
         </div>
       </div>
+
+      {/* Real-World Street Map */}
+      <div style={{ borderRadius: '16px', overflow: 'hidden', border: '1.5px solid #e2e8f0', marginBottom: '16px', position: 'relative' }}>
+        <div style={{
+          position: 'absolute', top: '12px', left: '12px', zIndex: 400,
+          background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(6px)',
+          border: '1px solid #e2e8f0', padding: '4px 12px', borderRadius: '999px',
+          fontSize: '0.72rem', fontWeight: 800, color: '#0f172a',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '6px'
+        }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: phoneGpsActive ? '#10b981' : '#f59e0b' }}></span>
+          <span>{phoneGpsActive ? 'STREET LEVEL SATELLITE TRACKING' : 'MAP VIEW'}</span>
+        </div>
+
+        {localCoords.lat && (
+          <div style={{
+            position: 'absolute', top: '12px', right: '12px', zIndex: 400,
+            background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(6px)',
+            border: '1px solid #e2e8f0', padding: '4px 12px', borderRadius: '999px',
+            fontSize: '0.72rem', fontFamily: 'monospace', fontWeight: 800, color: '#0f172a',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+          }}>
+            📍 {localCoords.lat.toFixed(6)}° N, {localCoords.lng.toFixed(6)}° E
+          </div>
+        )}
+
+        <div ref={mapContainerRef} style={{ width: '100%', height: '260px', background: '#f8fafc' }} />
+      </div>
+
+      {/* Real Physical Location Box */}
+      <div style={{
+        background: '#f8fafc',
+        border: '1px solid #e2e8f0',
+        borderRadius: '14px',
+        padding: '14px 16px',
+        marginBottom: '16px'
+      }}>
+        <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          📍 Actual Physical Address (Reverse Geocoded)
+        </div>
+        <div style={{ fontSize: '1rem', fontWeight: 900, color: '#0f172a', marginTop: '3px' }}>
+          {localLocation}
+        </div>
+        {localCoords.lat && (
+          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px', fontFamily: 'monospace' }}>
+            Precision: ±{localAccuracy || '3'}m · Coordinates: {localCoords.lat.toFixed(6)}, {localCoords.lng.toFixed(6)}
+          </div>
+        )}
+      </div>
+
+      {/* Real Telemetry Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '16px' }}>
+        <div style={{ padding: '12px 14px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Current Speed</div>
+          <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', marginTop: '2px', fontFamily: 'monospace' }}>
+            {localSpeed} <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>km/h</span>
+          </div>
+        </div>
+
+        <div style={{ padding: '12px 14px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Cold Chain</div>
+          <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#059669', marginTop: '2px', fontFamily: 'monospace' }}>
+            {localTemp}°C
+          </div>
+        </div>
+
+        <div style={{ padding: '12px 14px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>GPS Packets</div>
+          <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', marginTop: '2px', fontFamily: 'monospace' }}>
+            {packetCount}
+          </div>
+        </div>
+      </div>
+
+      {/* Driver info & status */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#64748b', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+        <div>
+          Driver: <strong style={{ color: '#0f172a' }}>{driverName}</strong> ({vehicleNo}) · {driverPhone}
+        </div>
+        <div>
+          {lastPacketTime ? `Last packet at ${lastPacketTime}` : 'Open driver app to stream live coordinates'}
+        </div>
+      </div>
+
+      {/* QR Code Modal for Real Phone Tracking */}
+      {showQrModal && (
+        <div
+          onClick={() => setShowQrModal(false)}
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10002, padding: '20px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff', borderRadius: '24px', padding: '28px',
+              maxWidth: '420px', width: '100%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.2)'
+            }}
+          >
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '12px',
+              background: '#0f172a', color: '#ffffff', margin: '0 auto 14px auto',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem'
+            }}>
+              📱
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', marginBottom: '6px' }}>
+              Connect Real Phone GPS
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '20px', lineHeight: '1.4' }}>
+              Scan this QR code with your smartphone camera. It will open the real-time GPS transponder, streaming your actual physical walking/driving position to this map.
+            </p>
+
+            <div style={{
+              display: 'inline-block', padding: '16px', background: '#ffffff',
+              borderRadius: '18px', border: '1.5px solid #e2e8f0', boxShadow: '0 4px 14px rgba(0,0,0,0.05)',
+              marginBottom: '16px'
+            }}>
+              <QRCodeSVG value={driverAppUrl} size={180} />
+            </div>
+
+            <div style={{ fontSize: '0.74rem', color: '#64748b', wordBreak: 'break-all', marginBottom: '20px', background: '#f8fafc', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              Direct link for testing on this computer:<br/>
+              <a href="/driver" target="_blank" style={{ color: '#0284c7', fontWeight: 700, textDecoration: 'none' }}>
+                Open /driver in new tab
+              </a>
+            </div>
+
+            <button
+              onClick={() => setShowQrModal(false)}
+              className="btn btn-secondary"
+              style={{ width: '100%', padding: '12px', borderRadius: '12px', fontWeight: 800 }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

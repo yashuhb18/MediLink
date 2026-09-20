@@ -25,52 +25,67 @@ export default function ProximityIndiaMap({
   // Initialize and maintain the Leaflet map
   useEffect(() => {
     let isMounted = true;
-
-    // Load Leaflet CSS
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
+    let resizeObserver = null;
+    let pollTimer = null;
 
     const renderMap = () => {
-      if (!isMounted || !mapContainerRef.current || !window.L) return;
+      if (!isMounted || !mapContainerRef.current || !window.L || viewMode !== 'map') return;
       const L = window.L;
 
-      // Clean up previous map instance
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
+      try {
+        // Clean up previous map instance if container was reused
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+        } else if (mapContainerRef.current._leaflet_id) {
+          mapContainerRef.current._leaflet_id = null;
+        }
+
+        // 1. Create Leaflet Map centered on Karnataka / South India
+        const map = L.map(mapContainerRef.current, {
+          center: [12.95, 76.5],
+          zoom: 7,
+          zoomControl: true,
+          scrollWheelZoom: true,
+          attributionControl: false
+        });
+        mapInstanceRef.current = map;
+
+        // 2. OpenStreetMap High-Res Tiles with multi-subdomain fallback
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          subdomains: ['a', 'b', 'c'],
+          maxZoom: 18,
+          minZoom: 5,
+        }).addTo(map);
+
+        // 3. Layer Group for dynamic hospital nodes & routes
+        const group = L.layerGroup().addTo(map);
+        markerGroupRef.current = group;
+
+        // Draw all current hospital nodes & routes
+        updateMarkers(map, group, L);
+
+        // Multi-stage invalidateSize to guarantee layout recalculation
+        const triggerInvalidate = () => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        };
+        setTimeout(triggerInvalidate, 60);
+        setTimeout(triggerInvalidate, 200);
+        setTimeout(triggerInvalidate, 500);
+        setTimeout(triggerInvalidate, 1000);
+
+        // Attach ResizeObserver to auto-refit whenever tab or window sizes change
+        if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
+          resizeObserver = new ResizeObserver(() => {
+            triggerInvalidate();
+          });
+          resizeObserver.observe(mapContainerRef.current);
+        }
+      } catch (err) {
+        console.warn('Leaflet map init notice:', err);
       }
-
-      // 1. Create Leaflet Map centered on Karnataka / South India
-      const map = L.map(mapContainerRef.current, {
-        center: [12.95, 76.5],
-        zoom: 7,
-        zoomControl: true,
-        scrollWheelZoom: true,
-        attributionControl: false
-      });
-      mapInstanceRef.current = map;
-
-      // 2. OpenStreetMap High-Res Tiles
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 18,
-        minZoom: 5,
-      }).addTo(map);
-
-      // 3. Layer Group for dynamic hospital nodes & routes
-      const group = L.layerGroup().addTo(map);
-      markerGroupRef.current = group;
-
-      // Draw all current hospital nodes & routes
-      updateMarkers(map, group, L);
-
-      // Guarantee tile layout calculation
-      setTimeout(() => { if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize(); }, 150);
-      setTimeout(() => { if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize(); }, 450);
     };
 
     const updateMarkers = (map, group, L) => {
@@ -197,24 +212,43 @@ export default function ProximityIndiaMap({
       }
     };
 
-    // Load Leaflet JS
-    if (!window.L) {
-      if (!document.getElementById('leaflet-script')) {
-        const script = document.createElement('script');
+    // Ensure Leaflet is loaded
+    if (window.L) {
+      renderMap();
+    } else {
+      // Dynamic injection + polling for rapid initialization
+      let script = document.getElementById('leaflet-script');
+      if (!script) {
+        script = document.createElement('script');
         script.id = 'leaflet-script';
         script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
         script.async = true;
-        script.onload = () => {
-          if (isMounted) renderMap();
-        };
         document.body.appendChild(script);
       }
-    } else {
-      renderMap();
+
+      script.addEventListener('load', () => {
+        if (isMounted) renderMap();
+      });
+
+      // Interval polling fallback (checks every 50ms for 5 seconds)
+      let elapsed = 0;
+      pollTimer = setInterval(() => {
+        elapsed += 50;
+        if (window.L) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          if (isMounted) renderMap();
+        } else if (elapsed > 5000) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }, 50);
     }
 
     return () => {
       isMounted = false;
+      if (pollTimer) clearInterval(pollTimer);
+      if (resizeObserver) resizeObserver.disconnect();
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;

@@ -28,6 +28,11 @@ async function decodeQRFromBuffer(imageBuffer) {
       baseImg = await (jimpModule.read || jimpModule)(imageBuffer);
     }
 
+    // Downsample if image is overly large for ultra-fast processing
+    if (baseImg.bitmap.width > 500) {
+      baseImg.resize({ w: 480 });
+    }
+
     // Pass 1: Raw image
     let code = tryDecode(baseImg);
 
@@ -63,37 +68,36 @@ async function decodeQRFromBuffer(imageBuffer) {
       }
     }
 
-    // Pass 6: Scaled up 1.5x (small QR in frame)
-    if (!code) {
-      const p6 = baseImg.clone().scale(1.5).greyscale().contrast(0.5);
-      code = tryDecode(p6);
-    }
-
-    // Pass 7: Scaled down 0.75x (reduces noise on low-res cameras)
-    if (!code) {
-      const p7 = baseImg.clone().scale(0.75).greyscale().contrast(0.6);
-      code = tryDecode(p7);
-    }
-
     if (code && code.data) {
       console.log(`[QR Decoder] 🎯 Successfully Decoded Optical QR: "${code.data}"`);
       let parsedPayload = null;
       try {
         if (code.data.startsWith('{')) {
           parsedPayload = JSON.parse(code.data);
+          if (parsedPayload.qrId === undefined && parsedPayload.batch) {
+            parsedPayload.qrId = `QR-${parsedPayload.batch}`;
+          }
+          if (parsedPayload.count === undefined && parsedPayload.packageCount !== undefined) {
+            parsedPayload.count = parseInt(parsedPayload.packageCount);
+          }
         } else if (code.data.startsWith('ML:')) {
-          // Compact format: ML:ACTION:REQUEST_ID:BATCH:WEIGHT:MEDICINE
+          // Compact format: ML:ACTION:REQUEST_ID:BATCH:WEIGHT:MEDICINE:COUNT:QR_ID
           const parts = code.data.split(':');
+          const batch = parts[3] || 'PA-902';
+          const count = parts[6] ? parseInt(parts[6]) : 1;
+          const qrId = parts[7] || `QR-${batch}`;
           parsedPayload = {
             prefix: parts[0],
             action: parts[1] || 'TRANSFER_DISPATCH',
             requestId: parts[2] || 'REQ-1001',
-            batch: parts[3] || 'PA-902',
+            batch,
             weightKg: parseFloat(parts[4]) || 1.0,
-            medicine: parts[5] || 'Paracetamol 500mg'
+            medicine: parts[5] || 'Paracetamol 500mg',
+            count,
+            qrId
           };
         } else {
-          parsedPayload = { rawText: code.data };
+          parsedPayload = { rawText: code.data, qrId: code.data };
         }
       } catch (e) {
         parsedPayload = { rawText: code.data };

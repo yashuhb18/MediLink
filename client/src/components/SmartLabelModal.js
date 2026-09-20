@@ -6,15 +6,38 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem }) {
   const [medicine, setMedicine] = useState(defaultItem?.medicine || 'Paracetamol 500mg');
   const [batch, setBatch] = useState(defaultItem?.batch || 'PA-902');
   const [weightKg, setWeightKg] = useState(defaultItem?.weightKg || defaultItem?.currentStockKg || 1.0);
-  const [action, setAction] = useState('TRANSFER_DISPATCH');
+  const [count, setCount] = useState(defaultItem?.packageCount || defaultItem?.count || 1);
+  const [action, setAction] = useState('ADD');
   const [requestId, setRequestId] = useState(defaultItem?.requestId || defaultItem?.id || '');
   const [sourceHospital, setSourceHospital] = useState('H02');
   const [destHospital, setDestHospital] = useState('H01');
 
+  const qrId = defaultItem?.qrId || (batch ? `QR-${batch}` : `QR-${Date.now()}`);
+
+  // Register or sync QR code with backend whenever generated
+  React.useEffect(() => {
+    if (isOpen && batch) {
+      fetch('http://localhost:5000/api/iot/qr-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          qrId,
+          medicine,
+          batch,
+          count: parseInt(count) || 1,
+          initialCount: parseInt(count) || 1,
+          weightKg: parseFloat(weightKg) || 1.0,
+          hospitalId: destHospital,
+          action
+        })
+      }).catch(() => {});
+    }
+  }, [isOpen, batch, medicine, count, weightKg, action, destHospital, qrId]);
+
   if (!isOpen) return null;
 
-  // Ultra-compact token for massive bold QR pixels (extremely easy for low-cost OV2640 lenses to decode)
-  const compactPayload = `ML:${action}:${requestId || 'REQ-1001'}:${batch || 'PA-902'}:${weightKg || '1.0'}:${medicine || 'Paracetamol'}`;
+  // Ultra-compact token: ML:ACTION:REQUEST_ID:BATCH:WEIGHT:MEDICINE:COUNT:QR_ID
+  const compactPayload = `ML:${action}:${requestId || 'REQ-1001'}:${batch || 'PA-902'}:${weightKg || '1.0'}:${medicine || 'Paracetamol'}:${count}:${qrId}`;
 
   return (
     <div style={{
@@ -51,7 +74,7 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem }) {
             <span style={{ fontSize: '1.2rem' }}>🏷️</span>
             <div>
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Smart Optical QR Label Generator</h3>
-              <div style={{ fontSize: '0.74rem', opacity: 0.9 }}>Point ESP32-CAM at this screen to trigger automated actions</div>
+              <div style={{ fontSize: '0.74rem', opacity: 0.9 }}>Point ESP32-CAM at this screen (Header ADD increments, REMOVE decrements)</div>
             </div>
           </div>
           <button
@@ -68,17 +91,17 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                Action Workflow
+                Default Action Workflow
               </label>
               <select
                 value={action}
                 onChange={(e) => setAction(e.target.value)}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 600 }}
               >
+                <option value="ADD">📥 ADD (Restock / +1 Count)</option>
+                <option value="REMOVE">💊 REMOVE (Dispense / -1 Count)</option>
                 <option value="TRANSFER_DISPATCH">📦 Inter-Hospital Dispatch</option>
                 <option value="TRANSFER_RECEIVE">✅ Inter-Hospital Receipt</option>
-                <option value="RESTOCK_INFLOW">📥 Pharmacy Stock Inflow</option>
-                <option value="PHARMACY_DISPENSE">💊 Clinical Dispense</option>
               </select>
             </div>
 
@@ -108,14 +131,14 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem }) {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                Weight / Quantity (Kg)
+                Active Count Variable
               </label>
               <input
                 type="number"
-                step="0.1"
-                value={weightKg}
-                onChange={(e) => setWeightKg(e.target.value)}
-                style={{ width: '100%', padding: '8px 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 700 }}
+                min="0"
+                value={count}
+                onChange={(e) => setCount(parseInt(e.target.value) || 0)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '10px', border: '1.5px solid #008b8b', fontSize: '0.85rem', fontWeight: 800, color: '#008b8b' }}
               />
             </div>
           </div>
@@ -150,24 +173,34 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem }) {
                 <div style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
                   Batch: {batch} | Weight: {weightKg} kg
                 </div>
-                <div style={{
-                  marginTop: '4px',
-                  display: 'inline-block',
-                  padding: '2px 8px',
-                  borderRadius: '999px',
-                  backgroundColor: '#e6f7f6',
-                  color: '#008b8b',
-                  fontSize: '0.7rem',
-                  fontWeight: 700
-                }}>
-                  {action}
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '6px' }}>
+                  <div style={{
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    backgroundColor: '#e6f7f6',
+                    color: '#008b8b',
+                    fontSize: '0.72rem',
+                    fontWeight: 800
+                  }}>
+                    Count: {count}
+                  </div>
+                  <div style={{
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    backgroundColor: '#f1f5f9',
+                    color: '#475569',
+                    fontSize: '0.7rem',
+                    fontWeight: 700
+                  }}>
+                    {action}
+                  </div>
                 </div>
               </div>
             </div>
 
             <div style={{ marginTop: '14px', fontSize: '0.78rem', color: '#475569', textAlign: 'center', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span className="pulse-dot-teal" style={{ width: '6px', height: '6px' }} />
-              Ready for ESP32-CAM optical capture & automated execution
+              Ready for ESP32-CAM optical capture (Header ADD: Count+1, REMOVE: Count-1)
             </div>
           </div>
 

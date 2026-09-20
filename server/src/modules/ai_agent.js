@@ -43,7 +43,7 @@ function callLocalGLM(prompt, systemPrompt = '') {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload)
       },
-      timeout: 30000
+      timeout: 4000
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
@@ -66,7 +66,7 @@ function callLocalGLM(prompt, systemPrompt = '') {
     req.on('error', (err) => reject(err));
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('GLM inference timed out (30s)'));
+      reject(new Error('GLM inference timed out (fallback applied)'));
     });
 
     req.write(payload);

@@ -41,6 +41,7 @@ function handleOutput(text) {
       uploadUrl,
       updatedAt: new Date().toISOString()
     }, null, 2));
+    fs.writeFileSync(path.join(__dirname, 'current_tunnel_url.txt'), uploadUrl);
   }
 }
 

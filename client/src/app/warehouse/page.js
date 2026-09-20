@@ -110,6 +110,7 @@ export default function WarehouseProtocolPage() {
 
   // Construct dynamic high-contrast GS1 QR Payload (Compact for instant ESP32-CAM optical recognition)
   const qrPayload = JSON.stringify({
+    qrId: `QR-${batchForm.batch}`,
     action: "ADD",
     medicine: batchForm.medicine,
     batch: batchForm.batch,

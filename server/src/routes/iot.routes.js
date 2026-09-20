@@ -101,4 +101,132 @@ router.post('/execute-action', async (req, res) => {
   }
 });
 
+// POST /api/iot/transit-gps — Driver Mobile Companion / IoT GPS Telemetry Stream (Zero-Auth, High Frequency)
+router.post('/transit-gps', async (req, res) => {
+  try {
+    const { requestId, lat, lng, progressPercent, currentSpeedKmH, temperatureC, etaMinutes, currentLocationName, liveTrackingStatus, accuracy } = req.body;
+    
+    // Auto-resolve requestId if not provided (pick first in-transit or accepted transfer)
+    let targetRequestId = requestId;
+    if (!targetRequestId) {
+      const inTransit = await db.getTransferRequests({ status: 'IN_TRANSIT' });
+      const activeTransfers = await db.getTransferRequests({ status: 'ACCEPTED' });
+      const candidate = inTransit[0] || activeTransfers[0];
+      if (candidate) targetRequestId = candidate.id;
+    }
+
+    if (!targetRequestId) {
+      return res.status(404).json({ error: 'No active transfer request found to track' });
+    }
+
+    const reqObj = await db.getTransferRequest(targetRequestId);
+    if (!reqObj) return res.status(404).json({ error: `Request ${targetRequestId} not found` });
+
+    const existingGps = reqObj.transitGps || {};
+    const newGps = {
+      lat: lat !== undefined ? parseFloat(lat) : (existingGps.lat ?? 12.9716),
+      lng: lng !== undefined ? parseFloat(lng) : (existingGps.lng ?? 77.5946),
+      progressPercent: progressPercent !== undefined ? Math.min(100, Math.max(0, parseInt(progressPercent))) : (existingGps.progressPercent ?? 0),
+      currentSpeedKmH: currentSpeedKmH !== undefined ? Math.round(parseFloat(currentSpeedKmH)) : (existingGps.currentSpeedKmH ?? 0),
+      temperatureC: temperatureC !== undefined ? +(parseFloat(temperatureC)).toFixed(1) : (existingGps.temperatureC ?? 4.0),
+      etaMinutes: etaMinutes !== undefined ? parseInt(etaMinutes) : (existingGps.etaMinutes ?? 35),
+      currentLocationName: currentLocationName || existingGps.currentLocationName || 'En-Route (Driver Phone GPS)',
+      accuracy: accuracy !== undefined ? +(parseFloat(accuracy)).toFixed(1) : (existingGps.accuracy ?? 3.5),
+      updatedAt: new Date().toISOString()
+    };
+
+    const newStatus = liveTrackingStatus || (newGps.progressPercent >= 100 ? 'ARRIVED_AT_DOCK' : 'IN_TRANSIT');
+
+    const updated = await db.updateTransferRequest(targetRequestId, {
+      transitGps: newGps,
+      status: 'IN_TRANSIT',
+      liveTrackingStatus: newStatus
+    });
+
+    const { broadcastSSE } = require('./events.routes');
+    broadcastSSE({
+      type: 'TRANSIT_GPS_UPDATED',
+      requestId: targetRequestId,
+      transitGps: newGps,
+      liveTrackingStatus: newStatus,
+      transfer: updated
+    });
+
+    res.json({
+      success: true,
+      requestId: targetRequestId,
+      transitGps: newGps,
+      status: newStatus
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/iot/active-transfers — List active consignments ready for driver tracking
+router.get('/active-transfers', async (req, res) => {
+  try {
+    const inTransit = await db.getTransferRequests({ status: 'IN_TRANSIT' });
+    const accepted = await db.getTransferRequests({ status: 'ACCEPTED' });
+    res.json({
+      success: true,
+      transfers: [...inTransit, ...accepted]
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/iot/qr-codes — List all registered QR codes with live count variables
+router.get('/qr-codes', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const qrCodes = await db.getAllQRCodes(limit);
+    res.json({
+      success: true,
+      count: qrCodes.length,
+      qrCodes
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/iot/qr-codes/:qrId — Get specific QR code details & scan history
+router.get('/qr-codes/:qrId', async (req, res) => {
+  try {
+    const qr = await db.getQRCode(req.params.qrId);
+    if (!qr) return res.status(404).json({ error: `QR Code '${req.params.qrId}' not found` });
+    res.json({ success: true, qrCode: qr });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/iot/qr-codes — Register a new QR code with custom initial count
+router.post('/qr-codes', async (req, res) => {
+  try {
+    const { qrId, medicine, batch, count, initialCount, weightKg, dosageUnit, hospitalId, action, rawQrData } = req.body;
+    if (!medicine && !batch && !qrId) {
+      return res.status(400).json({ error: 'Medicine, batch, or qrId required' });
+    }
+    const created = await db.createOrUpdateQRCode({
+      qrId,
+      medicine: medicine || 'Paracetamol 500mg',
+      batch: batch || 'BATCH-01',
+      count: count !== undefined ? parseInt(count) : (initialCount !== undefined ? parseInt(initialCount) : 1),
+      initialCount: initialCount !== undefined ? parseInt(initialCount) : 1,
+      weightKg: parseFloat(weightKg) || 1.0,
+      dosageUnit: dosageUnit || 'Strips',
+      hospitalId: hospitalId || 'H01',
+      action: (action || 'ADD').toUpperCase(),
+      rawQrData
+    });
+    res.status(201).json({ success: true, qrCode: created });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
+

@@ -18,6 +18,7 @@ const KarmaHistory = require('../models/KarmaHistory');
 const AuditLog = require('../models/AuditLog');
 const SensorAlert = require('../models/SensorAlert');
 const WeightHistory = require('../models/WeightHistory');
+const QRCode = require('../models/QRCode');
 const bcrypt = require('bcryptjs');
 
 let firestoreDb = null;
@@ -117,6 +118,7 @@ const memoryDb = {
   sensorAlerts: [
     { id: 'SA-001', hospitalId: 'H01', loadCellId: 'LC04', type: 'STUCK_SENSOR', message: 'LC04 reading unchanged for 8h while others fluctuate', severity: 'MEDIUM', resolved: false, timestamp: new Date(Date.now() - 7200000).toISOString() }
   ],
+  qrCodes: [],
   lockedBoxes: new Set(),
   _nextReqId: 1000
 };
@@ -159,57 +161,103 @@ const db = {
   // ── Users ──
   async getUserByEmail(email) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const user = await User.findOne({ email: email.toLowerCase() }).lean();
-      return user ? toPlain(user) : null;
+      try {
+        const user = await User.findOne({ email: email.toLowerCase() }).lean();
+        if (user) return toPlain(user);
+      } catch (err) {
+        console.warn('[MongoDB] getUserByEmail fallback to memoryDb:', err.message);
+        return memoryDb.users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
+      }
+      return null;
     }
     if (this.mode === 'memory') return memoryDb.users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
-    const snap = await firestoreDb.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
-    return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+    try {
+      const snap = await firestoreDb.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
+      return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+    } catch (e) {
+      return memoryDb.users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
+    }
   },
 
   async getUserById(id) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const user = await User.findOne({ id }).lean();
-      return user ? toPlain(user) : null;
+      try {
+        const user = await User.findOne({ id }).lean();
+        if (user) return toPlain(user);
+      } catch (err) {
+        console.warn('[MongoDB] getUserById fallback to memoryDb:', err.message);
+        return memoryDb.users.find(u => u.id === id) || null;
+      }
+      return null;
     }
     if (this.mode === 'memory') return memoryDb.users.find(u => u.id === id) || null;
-    const doc = await firestoreDb.collection('users').doc(id).get();
-    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    try {
+      const doc = await firestoreDb.collection('users').doc(id).get();
+      return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    } catch (e) {
+      return memoryDb.users.find(u => u.id === id) || null;
+    }
   },
 
   // ── Hospitals ──
   async getHospitals() {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const list = await Hospital.find({}).lean();
-      return list.map(toPlain);
+      try {
+        const list = await Hospital.find({}).lean();
+        if (list && list.length > 0) return list.map(toPlain);
+      } catch (err) {
+        console.warn('[MongoDB] getHospitals fallback to memoryDb:', err.message);
+      }
     }
     if (this.mode === 'memory') return memoryDb.hospitals;
-    const snap = await firestoreDb.collection('hospitals').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+      const snap = await firestoreDb.collection('hospitals').get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      return memoryDb.hospitals;
+    }
   },
 
   async getHospital(id) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const h = await Hospital.findOne({ id }).lean();
-      return h ? toPlain(h) : null;
+      try {
+        const h = await Hospital.findOne({ id }).lean();
+        if (h) return toPlain(h);
+      } catch (err) {
+        console.warn('[MongoDB] getHospital fallback to memoryDb:', err.message);
+      }
     }
     if (this.mode === 'memory') return memoryDb.hospitals.find(h => h.id === id) || null;
-    const doc = await firestoreDb.collection('hospitals').doc(id).get();
-    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    try {
+      const doc = await firestoreDb.collection('hospitals').doc(id).get();
+      return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    } catch (e) {
+      return memoryDb.hospitals.find(h => h.id === id) || null;
+    }
   },
 
   async updateHospital(id, updates) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const updated = await Hospital.findOneAndUpdate({ id }, updates, { new: true }).lean();
-      return toPlain(updated);
+      try {
+        const updated = await Hospital.findOneAndUpdate({ id }, updates, { returnDocument: 'after' }).lean();
+        if (updated) return toPlain(updated);
+      } catch (err) {
+        console.warn('[MongoDB] updateHospital fallback to memoryDb:', err.message);
+      }
     }
     if (this.mode === 'memory') {
       const h = memoryDb.hospitals.find(h => h.id === id);
       if (h) Object.assign(h, updates);
       return h;
     }
-    await firestoreDb.collection('hospitals').doc(id).update(updates);
-    return this.getHospital(id);
+    try {
+      await firestoreDb.collection('hospitals').doc(id).update(updates);
+      return this.getHospital(id);
+    } catch (e) {
+      const h = memoryDb.hospitals.find(h => h.id === id);
+      if (h) Object.assign(h, updates);
+      return h;
+    }
   },
 
   getDistance(a, b) {
@@ -222,7 +270,7 @@ const db = {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
       try {
         const list = await Inventory.find({ hospitalId }).sort({ updatedAt: -1, createdAt: -1, _id: -1 }).lean();
-        if (list && list.length > 0) return list.map(toPlain);
+        if (list) return list.map(toPlain);
       } catch (err) {
         console.warn('[MongoDB] getInventoryForHospital fallback:', err.message);
       }
@@ -239,8 +287,8 @@ const db = {
   async getAllInventory() {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
       try {
-        const list = await Inventory.find({}).lean();
-        if (list && list.length > 0) return list.map(toPlain);
+        const list = await Inventory.find({}).sort({ updatedAt: -1, createdAt: -1, _id: -1 }).lean();
+        if (list) return list.map(toPlain);
       } catch (err) {
         console.warn('[MongoDB] getAllInventory fallback:', err.message);
       }
@@ -255,14 +303,20 @@ const db = {
   },
 
   async createInventoryItem(data) {
+    const pkgCount = data.packageCount !== undefined ? parseInt(data.packageCount) : Math.round((parseFloat(data.currentStockKg) || 1.0) * 20);
+    const dUnit = data.dosageUnit || 'Strips';
     const newItem = {
       id: data.id || `INV-${Date.now()}-${Math.floor(Math.random()*1000)}`,
       hospitalId: data.hospitalId || 'H01',
       medicine: data.medicine,
       currentStockKg: parseFloat(data.currentStockKg) || 1.0,
       minThresholdKg: parseFloat(data.minThresholdKg) || 1.0,
-      consumptionRatePerHour: 0.05,
+      consumptionRatePerHour: data.consumptionRatePerHour || 0.05,
       batch: data.batch || 'BATCH-01',
+      dosageForm: data.dosageForm || 'Tablets',
+      dosageUnit: dUnit,
+      packageCount: pkgCount,
+      unitDescription: data.unitDescription || `${pkgCount} ${dUnit}`,
       expiryDate: data.expiryDate || new Date(Date.now() + 365*86400000).toISOString().split('T')[0],
       rfidUid: data.rfidUid || `TAG-${Math.floor(Math.random()*9000+1000)}`,
       boxId: data.boxId || 'BOX-A1',
@@ -305,7 +359,7 @@ const db = {
   async updateInventoryItem(id, updates) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
       try {
-        const updated = await Inventory.findOneAndUpdate({ id }, updates, { new: true }).lean();
+        const updated = await Inventory.findOneAndUpdate({ id }, updates, { returnDocument: 'after' }).lean();
         if (updated && updates.currentStockKg !== undefined) {
           await WeightHistory.create({
             inventoryItemId: id,
@@ -420,13 +474,23 @@ const db = {
     };
 
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const created = await TransferRequest.create(req);
-      await this.addAuditLog('TRANSFER_CREATED', `${req.id}: ${req.medicine} ${req.quantityKg}kg`, data.requestingHospitalId, data.userId);
-      return toPlain(created);
+      try {
+        const created = await TransferRequest.create(req);
+        await this.addAuditLog('TRANSFER_CREATED', `${req.id}: ${req.medicine} ${req.quantityKg}kg`, data.requestingHospitalId, data.userId);
+        return toPlain(created);
+      } catch (err) {
+        console.warn('[MongoDB] createTransferRequest fallback to memoryDb:', err.message);
+      }
     }
 
     if (this.mode === 'memory') { memoryDb.transferRequests.unshift(req); }
-    else { await firestoreDb.collection('transferRequests').doc(req.id).set(req); }
+    else {
+      try {
+        await firestoreDb.collection('transferRequests').doc(req.id).set(req);
+      } catch (e) {
+        memoryDb.transferRequests.unshift(req);
+      }
+    }
     await this.addAuditLog('TRANSFER_CREATED', `${req.id}: ${req.medicine} ${req.quantityKg}kg`, data.requestingHospitalId, data.userId);
     return req;
   },
@@ -434,43 +498,65 @@ const db = {
   async updateTransferRequest(id, updates) {
     updates.updatedAt = new Date().toISOString();
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const updated = await TransferRequest.findOneAndUpdate({ id }, updates, { new: true }).lean();
-      return toPlain(updated);
+      try {
+        const updated = await TransferRequest.findOneAndUpdate({ id }, updates, { returnDocument: 'after' }).lean();
+        if (updated) return toPlain(updated);
+      } catch (err) {
+        console.warn('[MongoDB] updateTransferRequest fallback to memoryDb:', err.message);
+      }
     }
     if (this.mode === 'memory') {
       const req = memoryDb.transferRequests.find(r => r.id === id);
       if (req) Object.assign(req, updates);
       return req;
     }
-    await firestoreDb.collection('transferRequests').doc(id).update(updates);
-    const doc = await firestoreDb.collection('transferRequests').doc(id).get();
-    return { id: doc.id, ...doc.data() };
+    try {
+      await firestoreDb.collection('transferRequests').doc(id).update(updates);
+      const doc = await firestoreDb.collection('transferRequests').doc(id).get();
+      return { id: doc.id, ...doc.data() };
+    } catch (e) {
+      const req = memoryDb.transferRequests.find(r => r.id === id);
+      if (req) Object.assign(req, updates);
+      return req;
+    }
   },
 
   async getTransferRequest(id) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const doc = await TransferRequest.findOne({ id }).lean();
-      return doc ? toPlain(doc) : null;
+      try {
+        const doc = await TransferRequest.findOne({ id }).lean();
+        if (doc) return toPlain(doc);
+      } catch (err) {
+        console.warn('[MongoDB] getTransferRequest fallback to memoryDb:', err.message);
+      }
     }
     if (this.mode === 'memory') return memoryDb.transferRequests.find(r => r.id === id) || null;
-    const doc = await firestoreDb.collection('transferRequests').doc(id).get();
-    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    try {
+      const doc = await firestoreDb.collection('transferRequests').doc(id).get();
+      return doc.exists ? { id: doc.id, ...doc.data() } : null;
+    } catch (e) {
+      return memoryDb.transferRequests.find(r => r.id === id) || null;
+    }
   },
 
   // ── Dual Inventory Update ──
   async dualInventoryUpdate(sourceItemId, destHospitalId, medicine, quantityKg) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const src = await Inventory.findOne({ id: sourceItemId });
-      if (src) {
-        src.currentStockKg = Math.max(0, +(src.currentStockKg - quantityKg).toFixed(2));
-        await src.save();
+      try {
+        const src = await Inventory.findOne({ id: sourceItemId });
+        if (src) {
+          src.currentStockKg = Math.max(0, +(src.currentStockKg - quantityKg).toFixed(2));
+          await src.save();
+        }
+        const dest = await Inventory.findOne({ hospitalId: destHospitalId, medicine: new RegExp(`^${medicine}$`, 'i') });
+        if (dest) {
+          dest.currentStockKg = +(dest.currentStockKg + quantityKg).toFixed(2);
+          await dest.save();
+        }
+        return;
+      } catch (err) {
+        console.warn('[MongoDB] dualInventoryUpdate fallback to memoryDb:', err.message);
       }
-      const dest = await Inventory.findOne({ hospitalId: destHospitalId, medicine: new RegExp(`^${medicine}$`, 'i') });
-      if (dest) {
-        dest.currentStockKg = +(dest.currentStockKg + quantityKg).toFixed(2);
-        await dest.save();
-      }
-      return;
     }
     if (this.mode === 'memory') {
       const src = memoryDb.inventory.find(i => i.id === sourceItemId);
@@ -489,80 +575,335 @@ const db = {
       timestamp: new Date().toISOString()
     };
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const created = await AuditLog.create(entry);
-      return toPlain(created);
+      try {
+        const created = await AuditLog.create(entry);
+        return toPlain(created);
+      } catch (err) {
+        console.warn('[MongoDB] addAuditLog fallback to memoryDb:', err.message);
+      }
     }
     if (this.mode === 'memory') { memoryDb.auditLog.unshift(entry); }
-    else { await firestoreDb.collection('auditLog').add(entry); }
+    else {
+      try {
+        await firestoreDb.collection('auditLog').add(entry);
+      } catch (e) {
+        memoryDb.auditLog.unshift(entry);
+      }
+    }
     return entry;
   },
 
   async getAuditLog(limit = 100) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const docs = await AuditLog.find({}).sort({ timestamp: -1 }).limit(limit).lean();
-      return docs.map(toPlain);
+      try {
+        const docs = await AuditLog.find({}).sort({ timestamp: -1 }).limit(limit).lean();
+        if (docs && docs.length > 0) return docs.map(toPlain);
+      } catch (err) {
+        console.warn('[MongoDB] getAuditLog fallback to memoryDb:', err.message);
+      }
     }
     if (this.mode === 'memory') return memoryDb.auditLog.slice(0, limit);
-    const snap = await firestoreDb.collection('auditLog').orderBy('timestamp', 'desc').limit(limit).get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+      const snap = await firestoreDb.collection('auditLog').orderBy('timestamp', 'desc').limit(limit).get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      return memoryDb.auditLog.slice(0, limit);
+    }
   },
 
   // ── Karma ──
   async addKarmaChange(hospitalId, change, reason) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const h = await Hospital.findOne({ id: hospitalId });
-      if (h) {
-        h.karmaScore = Math.max(0, Math.min(100, h.karmaScore + change));
-        await h.save();
+      try {
+        const h = await Hospital.findOne({ id: hospitalId });
+        if (h) {
+          h.karmaScore = Math.max(0, Math.min(100, h.karmaScore + change));
+          await h.save();
+        }
+        await KarmaHistory.create({
+          id: `KH-${Date.now()}`,
+          hospitalId,
+          change,
+          reason,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      } catch (err) {
+        console.warn('[MongoDB] addKarmaChange fallback to memoryDb:', err.message);
       }
-      await KarmaHistory.create({
-        id: `KH-${Date.now()}`,
-        hospitalId,
-        change,
-        reason,
-        timestamp: new Date().toISOString()
-      });
-      return;
     }
     if (this.mode === 'memory') {
       const h = memoryDb.hospitals.find(h => h.id === hospitalId);
       if (h) h.karmaScore = Math.max(0, Math.min(100, h.karmaScore + change));
       memoryDb.karmaHistory.unshift({ id: `KH-${Date.now()}`, hospitalId, change, reason, timestamp: new Date().toISOString() });
     } else {
-      const hRef = firestoreDb.collection('hospitals').doc(hospitalId);
-      await firestoreDb.runTransaction(async t => {
-        const doc = await t.get(hRef);
-        const current = doc.data().karmaScore || 50;
-        t.update(hRef, { karmaScore: Math.max(0, Math.min(100, current + change)) });
-      });
-      await firestoreDb.collection('karmaHistory').add({ hospitalId, change, reason, timestamp: new Date().toISOString() });
+      try {
+        const hRef = firestoreDb.collection('hospitals').doc(hospitalId);
+        await firestoreDb.runTransaction(async t => {
+          const doc = await t.get(hRef);
+          const current = doc.data().karmaScore || 50;
+          t.update(hRef, { karmaScore: Math.max(0, Math.min(100, current + change)) });
+        });
+        await firestoreDb.collection('karmaHistory').add({ hospitalId, change, reason, timestamp: new Date().toISOString() });
+      } catch (e) {
+        const h = memoryDb.hospitals.find(h => h.id === hospitalId);
+        if (h) h.karmaScore = Math.max(0, Math.min(100, h.karmaScore + change));
+        memoryDb.karmaHistory.unshift({ id: `KH-${Date.now()}`, hospitalId, change, reason, timestamp: new Date().toISOString() });
+      }
     }
   },
 
   async getKarmaHistory(hospitalId) {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const docs = await KarmaHistory.find({ hospitalId }).sort({ timestamp: -1 }).lean();
-      return docs.map(toPlain);
+      try {
+        const docs = await KarmaHistory.find({ hospitalId }).sort({ timestamp: -1 }).lean();
+        if (docs && docs.length > 0) return docs.map(toPlain);
+      } catch (err) {
+        console.warn('[MongoDB] getKarmaHistory fallback to memoryDb:', err.message);
+      }
     }
     if (this.mode === 'memory') return memoryDb.karmaHistory.filter(k => k.hospitalId === hospitalId);
-    const snap = await firestoreDb.collection('karmaHistory').where('hospitalId', '==', hospitalId).orderBy('timestamp', 'desc').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+      const snap = await firestoreDb.collection('karmaHistory').where('hospitalId', '==', hospitalId).orderBy('timestamp', 'desc').get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      return memoryDb.karmaHistory.filter(k => k.hospitalId === hospitalId);
+    }
   },
 
   // ── Sensor Alerts ──
   async getSensorAlerts() {
     if (this.mode === 'mongodb' || this.mode === 'atlas') {
-      const docs = await SensorAlert.find({}).lean();
-      return docs.map(toPlain);
+      try {
+        const docs = await SensorAlert.find({}).lean();
+        if (docs && docs.length > 0) return docs.map(toPlain);
+      } catch (err) {
+        console.warn('[MongoDB] getSensorAlerts fallback to memoryDb:', err.message);
+      }
     }
     if (this.mode === 'memory') return memoryDb.sensorAlerts;
-    const snap = await firestoreDb.collection('sensorAlerts').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+      const snap = await firestoreDb.collection('sensorAlerts').get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      return memoryDb.sensorAlerts;
+    }
   },
 
   // ── Locked Boxes ──
   isBoxLocked(rfidUid) { return memoryDb.lockedBoxes.has(rfidUid); },
-  lockBox(rfidUid) { memoryDb.lockedBoxes.add(rfidUid); }
+  lockBox(rfidUid) { memoryDb.lockedBoxes.add(rfidUid); },
+
+  // ── QR Code Count Management (Increment on ADD, Decrement on REMOVE) ──
+  async createOrUpdateQRCode(data) {
+    const qrId = data.qrId || (data.batch ? `QR-${data.batch}` : `QR-${Date.now()}-${Math.floor(Math.random() * 1000)}`);
+    const initialCount = parseInt(data.initialCount !== undefined ? data.initialCount : (data.count !== undefined ? data.count : (data.packageCount !== undefined ? data.packageCount : 1))) || 1;
+    const count = parseInt(data.count !== undefined ? data.count : initialCount) || 1;
+    
+    const qrDoc = {
+      qrId,
+      medicine: data.medicine || 'Paracetamol 500mg',
+      batch: data.batch || 'BATCH-01',
+      count,
+      initialCount,
+      weightKg: parseFloat(data.weightKg) || 1.0,
+      dosageUnit: data.dosageUnit || 'Strips',
+      hospitalId: data.hospitalId || 'H01',
+      action: (data.action || 'ADD').toUpperCase(),
+      rawQrData: data.rawQrData || data.code || ''
+    };
+
+    if (this.mode === 'mongodb' || this.mode === 'atlas') {
+      try {
+        const existing = await QRCode.findOne({ qrId });
+        if (existing) {
+          existing.medicine = qrDoc.medicine;
+          existing.batch = qrDoc.batch;
+          if (data.count !== undefined) existing.count = count;
+          existing.weightKg = qrDoc.weightKg;
+          existing.dosageUnit = qrDoc.dosageUnit;
+          existing.hospitalId = qrDoc.hospitalId;
+          existing.action = qrDoc.action;
+          if (qrDoc.rawQrData) existing.rawQrData = qrDoc.rawQrData;
+          await existing.save();
+          return toPlain(existing);
+        } else {
+          const created = await QRCode.create(qrDoc);
+          return toPlain(created);
+        }
+      } catch (err) {
+        console.warn('[MongoDB] createOrUpdateQRCode fallback to memoryDb:', err.message);
+      }
+    }
+
+    const memIdx = memoryDb.qrCodes.findIndex(q => q.qrId === qrId);
+    if (memIdx >= 0) {
+      Object.assign(memoryDb.qrCodes[memIdx], qrDoc);
+      return memoryDb.qrCodes[memIdx];
+    } else {
+      memoryDb.qrCodes.unshift(qrDoc);
+      return qrDoc;
+    }
+  },
+
+  async getQRCode(identifier) {
+    if (!identifier) return null;
+    const cleanId = identifier.toString().trim();
+
+    if (this.mode === 'mongodb' || this.mode === 'atlas') {
+      try {
+        let doc = await QRCode.findOne({
+          $or: [
+            { qrId: cleanId },
+            { batch: cleanId },
+            { qrId: `QR-${cleanId}` },
+            { medicine: new RegExp(`^${cleanId}$`, 'i') }
+          ]
+        }).lean();
+        if (doc) return toPlain(doc);
+      } catch (err) {
+        console.warn('[MongoDB] getQRCode fallback:', err.message);
+      }
+    }
+
+    return memoryDb.qrCodes.find(q =>
+      q.qrId === cleanId ||
+      q.batch === cleanId ||
+      q.qrId === `QR-${cleanId}` ||
+      (q.medicine && q.medicine.toLowerCase() === cleanId.toLowerCase())
+    ) || null;
+  },
+
+  async incrementQRCount(identifier, step = 1, metadata = {}) {
+    let qr = await this.getQRCode(identifier);
+    const incAmount = parseInt(step) || 1;
+
+    if (!qr) {
+      // Auto-provision QR code entry if scanned first time
+      qr = await this.createOrUpdateQRCode({
+        qrId: metadata.qrId || (metadata.batch ? `QR-${metadata.batch}` : (identifier.startsWith('QR-') ? identifier : `QR-${identifier}`)),
+        medicine: metadata.medicine || identifier,
+        batch: metadata.batch || 'BATCH-AUTO',
+        count: 0,
+        initialCount: 0,
+        weightKg: metadata.weightKg || 1.0,
+        hospitalId: metadata.destHospital || metadata.hospitalId || 'H01'
+      });
+    }
+
+    const previousCount = qr.count || 0;
+    const newCount = previousCount + incAmount;
+
+    const historyEntry = {
+      action: 'ADD',
+      headerUsed: metadata.headerUsed || 'x-action: add',
+      previousCount,
+      newCount,
+      timestamp: new Date(),
+      source: metadata.source || metadata.deviceName || 'Node_1',
+      deviceName: metadata.deviceName || metadata.source || 'Node_1'
+    };
+
+    if (this.mode === 'mongodb' || this.mode === 'atlas') {
+      try {
+        const updated = await QRCode.findOneAndUpdate(
+          { qrId: qr.qrId },
+          {
+            $set: { 
+              count: newCount, 
+              action: 'ADD', 
+              lastScannedNode: metadata.deviceName || metadata.source || 'Node_1',
+              hospitalId: metadata.destHospital || qr.hospitalId || 'H01',
+              updatedAt: new Date() 
+            },
+            $push: { scanHistory: historyEntry }
+          },
+          { returnDocument: 'after' }
+        ).lean();
+        if (updated) return { ...toPlain(updated), previousCount, change: incAmount, action: 'ADD' };
+      } catch (err) {
+        console.warn('[MongoDB] incrementQRCount fallback:', err.message);
+      }
+    }
+
+    qr.count = newCount;
+    qr.action = 'ADD';
+    qr.lastScannedNode = metadata.deviceName || metadata.source || 'Node_1';
+    if (!qr.scanHistory) qr.scanHistory = [];
+    qr.scanHistory.push(historyEntry);
+    return { ...qr, previousCount, change: incAmount, action: 'ADD' };
+  },
+
+  async decrementQRCount(identifier, step = 1, metadata = {}) {
+    let qr = await this.getQRCode(identifier);
+    const decAmount = parseInt(step) || 1;
+
+    if (!qr) {
+      qr = await this.createOrUpdateQRCode({
+        qrId: metadata.qrId || (metadata.batch ? `QR-${metadata.batch}` : (identifier.startsWith('QR-') ? identifier : `QR-${identifier}`)),
+        medicine: metadata.medicine || identifier,
+        batch: metadata.batch || 'BATCH-AUTO',
+        count: 1,
+        initialCount: 1,
+        weightKg: metadata.weightKg || 1.0,
+        hospitalId: metadata.destHospital || metadata.hospitalId || 'H01'
+      });
+    }
+
+    const previousCount = qr.count !== undefined ? qr.count : 1;
+    const newCount = Math.max(0, previousCount - decAmount);
+
+    const historyEntry = {
+      action: 'REMOVE',
+      headerUsed: metadata.headerUsed || 'x-action: remove',
+      previousCount,
+      newCount,
+      timestamp: new Date(),
+      source: metadata.source || metadata.deviceName || 'Node_1',
+      deviceName: metadata.deviceName || metadata.source || 'Node_1'
+    };
+
+    if (this.mode === 'mongodb' || this.mode === 'atlas') {
+      try {
+        const updated = await QRCode.findOneAndUpdate(
+          { qrId: qr.qrId },
+          {
+            $set: { 
+              count: newCount, 
+              action: 'REMOVE', 
+              lastScannedNode: metadata.deviceName || metadata.source || 'Node_1',
+              updatedAt: new Date() 
+            },
+            $push: { scanHistory: historyEntry }
+          },
+          { returnDocument: 'after' }
+        ).lean();
+        if (updated) return { ...toPlain(updated), previousCount, change: -decAmount, action: 'REMOVE' };
+      } catch (err) {
+        console.warn('[MongoDB] decrementQRCount fallback:', err.message);
+      }
+    }
+
+    qr.count = newCount;
+    qr.action = 'REMOVE';
+    qr.lastScannedNode = metadata.deviceName || metadata.source || 'Node_1';
+    if (!qr.scanHistory) qr.scanHistory = [];
+    qr.scanHistory.push(historyEntry);
+    return { ...qr, previousCount, change: -decAmount, action: 'REMOVE' };
+  },
+
+  async getAllQRCodes(limit = 100) {
+    if (this.mode === 'mongodb' || this.mode === 'atlas') {
+      try {
+        const docs = await QRCode.find({}).sort({ updatedAt: -1, createdAt: -1 }).limit(limit).lean();
+        if (docs && docs.length > 0) return docs.map(toPlain);
+      } catch (err) {
+        console.warn('[MongoDB] getAllQRCodes fallback:', err.message);
+      }
+    }
+    return (memoryDb.qrCodes || []).slice(0, limit);
+  }
 };
 
 module.exports = { db, firestoreDb, memoryDb };
+
