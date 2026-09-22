@@ -36,6 +36,7 @@ const { decodeQRFromBuffer } = require('./modules/qr_decoder');
 const { uploadToCloudinary } = require('./config/cloudinary');
 const AutoScanner = require('./modules/auto_scanner');
 const { broadcastSSE } = require('./routes/events.routes');
+const { db } = require('./config/firebase');
 
 app.get('/api/upload', async (req, res) => {
   if (req.headers.accept && req.headers.accept.includes('text/html')) {
@@ -798,12 +799,22 @@ const NODE_HOSPITAL_MAP = {
 function resolveDeviceAndNode(rawDevice, rawHospital) {
   let dev = (rawDevice || '').toString().trim();
   const up = dev.toUpperCase();
+  const hUp = (rawHospital || '').toString().trim().toUpperCase();
   let hId = 'H01';
 
-  if (up.includes('NODE_3') || up.includes('NODE-3') || up.includes('NODE 3') || up === 'NODE3' || up === 'H03' || rawHospital === 'H03') {
+  if (up.includes('NODE_3') || up.includes('NODE-3') || up.includes('NODE 3') || up === 'NODE3' || up.includes('H03')) {
     dev = 'Node_3';
     hId = 'H03';
-  } else if (up.includes('NODE_2') || up.includes('NODE-2') || up.includes('NODE 2') || up === 'NODE2' || up === 'H02' || rawHospital === 'H02') {
+  } else if (up.includes('NODE_2') || up.includes('NODE-2') || up.includes('NODE 2') || up === 'NODE2' || up.includes('H02')) {
+    dev = 'Node_2';
+    hId = 'H02';
+  } else if (up.includes('NODE_1') || up.includes('NODE-1') || up.includes('NODE 1') || up === 'NODE1' || up.includes('H01')) {
+    dev = 'Node_1';
+    hId = 'H01';
+  } else if (hUp === 'H03') {
+    dev = 'Node_3';
+    hId = 'H03';
+  } else if (hUp === 'H02') {
     dev = 'Node_2';
     hId = 'H02';
   } else {
@@ -820,7 +831,8 @@ function resolveDeviceAndNode(rawDevice, rawHospital) {
 
 app.post('/api/upload', async (req, res) => {
   try {
-    const { image_data, source, deviceName: bodyDevice, requestId, inventoryItemId } = req.body;
+    const { source, deviceName: bodyDevice, requestId, inventoryItemId } = req.body;
+    const image_data = req.body.image_data || req.body.image || req.body.base64 || req.body.data;
     if (!image_data) {
       return res.status(400).json({
         success: false,

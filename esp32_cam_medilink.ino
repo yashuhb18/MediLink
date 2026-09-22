@@ -107,7 +107,7 @@ camera_config_t getCameraConfig(pixformat_t format, framesize_t size) {
     config.xclk_freq_hz = 10000000;
     config.pixel_format = format;
     config.frame_size = size; 
-    config.jpeg_quality = 10;
+    config.jpeg_quality = 18;
     config.fb_count = 1;
 
     if (psramFound()) {
@@ -188,6 +188,15 @@ String getJsonValue(const String& json, const String& key) {
         }
     }
     return "";
+}
+
+// Map device node name to respective hospital node
+String getHospitalId() {
+    String d = deviceName;
+    d.toUpperCase();
+    if (d.indexOf("3") != -1 || d.indexOf("H03") != -1) return "H03";
+    if (d.indexOf("2") != -1 || d.indexOf("H02") != -1) return "H02";
+    return "H01";
 }
 
 // =====================================================
@@ -535,7 +544,7 @@ void uploadImage() {
         http.addHeader("X-Medicine", "Auto_Detect");
         http.addHeader("X-Quantity", "1.0");
         http.addHeader("X-Batch", "Auto_Detect");
-        http.addHeader("X-Hospital-Id", "H01");
+        http.addHeader("X-Hospital-Id", getHospitalId().c_str());
         http.addHeader("X-Device-Name", deviceName.c_str());
 
         httpResponseCode = http.POST((uint8_t*)json_payload, strlen(json_payload));
@@ -555,7 +564,7 @@ void uploadImage() {
         http.addHeader("X-Medicine", "Auto_Detect");
         http.addHeader("X-Quantity", "1.0");
         http.addHeader("X-Batch", "Auto_Detect");
-        http.addHeader("X-Hospital-Id", "H01");
+        http.addHeader("X-Hospital-Id", getHospitalId().c_str());
         http.addHeader("X-Device-Name", deviceName.c_str());
 
         httpResponseCode = http.POST((uint8_t*)json_payload, strlen(json_payload));
