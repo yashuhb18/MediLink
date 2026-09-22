@@ -7,13 +7,13 @@ export default function MediBotChat() {
   const [messages, setMessages] = useState([
     {
       sender: 'bot',
-      text: "Hello Doctor/Supervisor! I am **MediBot**, powered by your local **GLM-4** model. I monitor real-time medicine load-cell weights, predict hospital stockouts, and rank inter-hospital donor transfers.",
+      text: "Hello Doctor/Supervisor! I am **MediBot**, the AI Clinical Intelligence Engine for MediLink. I monitor real-time medicine load-cell weights across all hospital nodes (H01, H02 & H03), predict stockouts, and orchestrate emergency donor transfers.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [modelStatus, setModelStatus] = useState({ online: true, model: 'glm4' });
+  const [modelStatus, setModelStatus] = useState({ online: true, model: 'MediBot AI' });
   const [userContext, setUserContext] = useState({ hospitalId: 'H01', role: 'SUPERVISOR' });
   const messagesEndRef = useRef(null);
 
@@ -58,14 +58,14 @@ export default function MediBotChat() {
       const botMsg = {
         sender: 'bot',
         text: res.reply || "I processed your request with current clinical data.",
-        model: res.model || 'glm4',
+        model: res.model || 'MediBot AI',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, botMsg]);
     } catch (err) {
       const errMsg = {
         sender: 'bot',
-        text: `⚠️ Error reaching local GLM-4 model: ${err.message || 'Connection timeout'}. Please verify Ollama is running on 127.0.0.1:11434.`,
+        text: `⚠️ Error communicating with AI: ${err.message || 'Connection timeout'}. Please try again.`,
         isError: true,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
@@ -191,7 +191,7 @@ export default function MediBotChat() {
                     background: 'rgba(255, 255, 255, 0.25)',
                     fontWeight: 600
                   }}>
-                    {modelStatus?.mode === 'ollama' ? 'GLM-4 Local' : 'Clinical AI'}
+                    {modelStatus?.model || 'MediBot AI'}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.74rem', opacity: 0.9, display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -201,7 +201,7 @@ export default function MediBotChat() {
                     borderRadius: '50%',
                     backgroundColor: '#4ade80'
                   }} />
-                  {modelStatus?.mode === 'ollama' ? '127.0.0.1:11434 Live' : 'AI Intelligence Active'}
+                  {modelStatus?.mode === 'ollama' ? 'GLM-4 Local Active' : (modelStatus?.mode === 'groq' ? 'Groq Llama 3.3 Active' : (modelStatus?.mode === 'gemini' ? 'Gemini Flash Active' : 'Clinical AI Active'))}
                 </div>
               </div>
             </div>
@@ -315,7 +315,7 @@ export default function MediBotChat() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', background: '#f1f5f9', borderRadius: '12px', width: 'fit-content' }}>
                 <span className="pulse-dot" style={{ width: '8px', height: '8px' }} />
                 <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
-                  GLM-4 is analyzing live telemetry...
+                  MediBot AI is analyzing live hospital telemetry...
                 </span>
               </div>
             )}
