@@ -461,13 +461,29 @@ export default function UnifiedSupervisorPortal() {
                               </span>
                             </td>
                             <td>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                                onClick={() => { setLabelItem(item); setSmartLabelOpen(true); }}
-                              >
-                                <i className="fa-solid fa-qrcode"></i> Label
-                              </button>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                {isLow && (
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{ background: '#ef4444', color: '#fff', padding: '4px 8px', fontSize: '0.74rem', fontWeight: 700, borderRadius: '6px' }}
+                                    onClick={() => {
+                                      setReqMedicine(item.medicine);
+                                      setReqDosageUnit(item.dosageUnit || 'Strips');
+                                      setSection('manual');
+                                    }}
+                                    title="Auto-Source from nearest hospital node"
+                                  >
+                                    <i className="fa-solid fa-truck-medical"></i> Source
+                                  </button>
+                                )}
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                  onClick={() => { setLabelItem(item); setSmartLabelOpen(true); }}
+                                >
+                                  <i className="fa-solid fa-qrcode"></i> Label
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
