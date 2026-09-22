@@ -863,28 +863,53 @@ app.post('/api/upload', async (req, res) => {
     const isQRDetected = !!(qrResult && qrResult.found && qrResult.payload);
     let scanResult = null;
 
-    // 3. Resolve Target Medicine Dynamically for THIS Specific Hospital Node
+    // 3. Resolve Target Medicine Dynamically
     let targetMedicine = null;
     let targetBatch = null;
 
-    if (isQRDetected && qrResult.payload.medicine) {
-      targetMedicine = qrResult.payload.medicine;
-      targetBatch = qrResult.payload.batch || null;
+    if (isQRDetected) {
+      if (qrResult.payload.medicine) {
+        targetMedicine = qrResult.payload.medicine;
+        targetBatch = qrResult.payload.batch || null;
+      } else {
+        const searchKey = qrResult.payload.qrId || qrResult.payload.batch || qrResult.data;
+        if (searchKey) {
+          const foundQR = await db.getQRCode(searchKey).catch(() => null);
+          if (foundQR && foundQR.medicine) {
+            targetMedicine = foundQR.medicine;
+            targetBatch = foundQR.batch;
+          } else {
+            const invList = await db.getInventoryForHospital(hospitalId).catch(() => []);
+            const match = invList.find(i => 
+              (i.batch && i.batch.toLowerCase() === searchKey.toLowerCase()) ||
+              (i.medicine && i.medicine.toLowerCase().includes(searchKey.toLowerCase()))
+            );
+            if (match) {
+              targetMedicine = match.medicine;
+              targetBatch = match.batch;
+            } else {
+              targetMedicine = qrResult.data;
+              targetBatch = qrResult.payload.batch || `BATCH-${hospitalId}`;
+            }
+          }
+        }
+      }
     } else if (headerMedicine && headerMedicine !== 'Auto_Detect' && headerMedicine !== 'auto' && headerMedicine.trim()) {
       targetMedicine = headerMedicine.trim();
       targetBatch = (headerBatch && headerBatch !== 'Auto_Detect') ? headerBatch.trim() : null;
     } else {
-      // Query this hospital's actual inventory from database!
-      const currentInv = await db.getInventoryForHospital(hospitalId).catch(() => []);
-      if (currentInv && currentInv.length > 0) {
-        // Pick the medicine with lowest stock / most urgent at this specific node
-        const sorted = [...currentInv].sort((a, b) => (a.currentStockKg || 0) - (b.currentStockKg || 0));
-        targetMedicine = sorted[0].medicine;
-        targetBatch = sorted[0].batch;
-      } else {
-        targetMedicine = (hospitalId === 'H03') ? "Amoxicillin 500mg" : ((hospitalId === 'H02') ? "Metformin 500mg" : "Paracetamol");
-        targetBatch = (hospitalId === 'H03') ? "AM-777" : ((hospitalId === 'H02') ? "MF-800" : "P123");
-      }
+      // ⚠️ No QR detected in camera frame & no explicit medicine specified:
+      // DO NOT fabricate a random medicine (like Paracetamol)! Inform the user clearly so they can align the camera.
+      console.log(`[ESP32 Scanner 📡] ⚠️ No QR detected in frame from ${deviceName}.`);
+      return res.status(200).json({
+        success: false,
+        qrFound: false,
+        status: "NO_QR_DETECTED",
+        message: `⚠️ No QR code detected by ${deviceName}. Please hold camera 20-30 cm from screen, align lens with the QR label, and ensure the entire QR is visible.`,
+        deviceName,
+        hospitalId,
+        hospitalName
+      });
     }
 
     const resolvedAction = (headerAction && headerAction !== 'AUTO') 

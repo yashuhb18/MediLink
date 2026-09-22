@@ -53,8 +53,8 @@ function findMatchingInventoryItem(items, medicineName, batchName) {
     if (batchMatch) return batchMatch;
   }
 
-  // 5. Fallback: Return lowest stock item of this hospital
-  return [...items].sort((a, b) => (a.currentStockKg || 0) - (b.currentStockKg || 0))[0] || items[0];
+  // No match found -> Return null so caller preserves the scanned medicine name!
+  return null;
 }
 
 const AutoScanner = {

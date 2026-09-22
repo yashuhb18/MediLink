@@ -110,14 +110,11 @@ export default function WarehouseProtocolPage() {
 
   // Construct dynamic high-contrast GS1 QR Payload (Compact for instant ESP32-CAM optical recognition)
   const qrPayload = JSON.stringify({
-    qrId: `QR-${batchForm.batch}`,
-    action: "ADD",
     medicine: batchForm.medicine,
     batch: batchForm.batch,
-    unit: batchForm.dosageUnit,
     count: parseInt(batchForm.packageCount) || 100,
-    weightKg: parseFloat(batchForm.weightKg) || 1.0,
-    destHospital: batchForm.hospitalId || "H01"
+    hospitalId: batchForm.hospitalId || "H01",
+    action: "ADD"
   });
 
   const handlePublishBatch = async (e) => {
@@ -708,8 +705,8 @@ export default function WarehouseProtocolPage() {
                       <div style={{ background: '#ffffff', padding: '10px', borderRadius: '12px', border: '1.5px solid #0f172a', boxShadow: '0 4px 14px rgba(0,0,0,0.06)' }}>
                         <QRCodeSVG
                           value={qrPayload}
-                          size={160}
-                          level="M"
+                          size={200}
+                          level="L"
                           includeMargin={true}
                         />
                       </div>
