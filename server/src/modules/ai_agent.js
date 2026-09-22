@@ -289,7 +289,18 @@ function generateClinicalReasoning(prompt, context = {}) {
  * Unified Multi-Engine AI Dispatcher
  */
 async function generateUnifiedAIResponse(prompt, systemPrompt, context = {}) {
-  // Tier 1: Groq Cloud API (if key configured)
+  // Tier 1: Local Ollama GLM-4 (Primary local engine for localhost evaluation)
+  try {
+    const isAlive = await checkOllamaAlive();
+    if (isAlive) {
+      const reply = await callLocalGLM(prompt, systemPrompt);
+      return { reply: reply.trim(), model: 'GLM-4 Local (Ollama)', isLiveLLM: true };
+    }
+  } catch (e) {
+    console.warn('[AI Agent] Local Ollama attempt failed:', e.message);
+  }
+
+  // Tier 2: Groq Cloud API (if key configured, e.g. for Render cloud)
   if (process.env.GROQ_API_KEY) {
     try {
       const res = await callGroqAPI(prompt, systemPrompt);
@@ -299,7 +310,7 @@ async function generateUnifiedAIResponse(prompt, systemPrompt, context = {}) {
     }
   }
 
-  // Tier 2: Google Gemini API (if key configured)
+  // Tier 3: Google Gemini API (if key configured)
   if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
     try {
       const res = await callGeminiAPI(prompt, systemPrompt);
@@ -307,17 +318,6 @@ async function generateUnifiedAIResponse(prompt, systemPrompt, context = {}) {
     } catch (e) {
       console.warn('[AI Agent] Gemini attempt failed:', e.message);
     }
-  }
-
-  // Tier 3: Local Ollama GLM-4 (if running locally)
-  try {
-    const isAlive = await checkOllamaAlive();
-    if (isAlive) {
-      const reply = await callLocalGLM(prompt, systemPrompt);
-      return { reply: reply.trim(), model: 'GLM-4 Local (Ollama)', isLiveLLM: true };
-    }
-  } catch (e) {
-    console.warn('[AI Agent] Local Ollama attempt failed:', e.message);
   }
 
   // Tier 4: High-Availability Cloud Generative AI
