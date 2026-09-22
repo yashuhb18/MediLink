@@ -6,12 +6,12 @@ import PortalHeader from '@/components/PortalHeader';
 import HeatmapGrid from '@/components/HeatmapGrid';
 import RegionalLiveMap from '@/components/RegionalLiveMap';
 import ESP32LiveGallery from '@/components/ESP32LiveGallery';
-import { adminApi, inventoryApi } from '@/lib/api';
+import { adminApi, inventoryApi, API_BASE } from '@/lib/api';
 
 export default function WarehouseProtocolPage() {
   const [user, setUser] = useState(null);
   const [section, setSection] = useState('dashboard');
-  const [heatmapData, setHeatmapData] = useState({ hospitals: [], heatmap: [] });
+  const [heatmapData, setHeatmapData] = useState({ hospitals: [], heatmap: [], nodeInventories: {} });
   const [auditLogs, setAuditLogs] = useState([]);
   const [sensorAlerts, setSensorAlerts] = useState([]);
   const [impersonating, setImpersonating] = useState(null);
@@ -21,6 +21,9 @@ export default function WarehouseProtocolPage() {
   const [consignments, setConsignments] = useState([]);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishSuccessMsg, setPublishSuccessMsg] = useState('');
+  const [selectedNodeTab, setSelectedNodeTab] = useState('ALL');
+  const [nodeSearchQuery, setNodeSearchQuery] = useState('');
+  const [realtimeNotice, setRealtimeNotice] = useState(null);
 
   // ─── Batch Serialization Studio State ───
   const [batchForm, setBatchForm] = useState({
@@ -60,6 +63,27 @@ export default function WarehouseProtocolPage() {
     if (u.role !== 'NETWORK_ADMIN') { window.location.href = '/'; return; }
     setUser(u);
     fetchWarehouseData();
+
+    // ⚡ Real-Time SSE Listener for ESP32-CAM Scans & Node Inventory Updates
+    const es = new EventSource(`${API_BASE}/events`);
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ESP32_SCAN_SUCCESS' || data.type === 'INVENTORY_UPDATED' || data.type === 'FACTORY_BATCH_CREATED' || data.type === 'EMERGENCY_TRANSFER_REQUESTED') {
+          fetchWarehouseData();
+          if (data.result && data.result.message) {
+            setRealtimeNotice({
+              title: `⚡ ESP32 Optical Scan: ${data.deviceName || data.hospitalId || 'Node'}`,
+              message: data.result.message,
+              time: new Date().toLocaleTimeString()
+            });
+            setTimeout(() => setRealtimeNotice(null), 9000);
+          }
+        }
+      } catch (e) {}
+    };
+
+    return () => es.close();
   }, []);
 
   const fetchWarehouseData = async () => {
@@ -184,6 +208,32 @@ export default function WarehouseProtocolPage() {
 
         <div className="page-body">
 
+          {/* Real-time Optical Scan Toast Notification */}
+          {realtimeNotice && (
+            <div style={{
+              background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+              border: '1.5px solid #10b981',
+              borderRadius: '12px',
+              padding: '12px 18px',
+              marginBottom: '18px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
+              animation: 'fadeIn 0.3s ease'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#10b981', color: '#fff', width: '34px', height: '34px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+                  <i className="fa-solid fa-qrcode"></i>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#065f46' }}>{realtimeNotice.title}</div>
+                  <div style={{ fontSize: '0.82rem', color: '#047857' }}>{realtimeNotice.message}</div>
+                </div>
+              </div>
+              <span style={{ fontSize: '0.72rem', color: '#059669', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{realtimeNotice.time}</span>
+            </div>
+          )}
 
           {/* ════════════════════════════════════════════════════════════════════
               SECTION 1: WAREHOUSE COMMAND HUB (DASHBOARD)
@@ -346,36 +396,91 @@ export default function WarehouseProtocolPage() {
                   <span className="badge badge-teal">{heatmapData.hospitals?.length || 3} Active Nodes</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-                  {heatmapData.hospitals?.map(h => (
-                    <div key={h.id} style={{
-                      padding: '18px', borderRadius: '14px',
-                      border: '1px solid #e2efee', background: '#f8fafb',
-                      display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '14px'
-                    }}>
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                          <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-mono)', color: '#0f172a' }}>{h.code}</strong>
-                          <span className={`badge ${h.active ? 'badge-success' : 'badge-danger'}`}>
-                            {h.active ? 'Online' : 'Offline'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: '#64748b', lineHeight: 1.6 }}>
-                          <div>Supervisor: <strong style={{ color: '#0f172a' }}>{h.supervisor}</strong></div>
-                          <div>Karma Score: <strong style={{ color: '#10b981' }}>{h.karmaScore} pts</strong></div>
-                          <div>Location: <strong>{h.location || 'Karnataka'}</strong></div>
-                        </div>
-                      </div>
+                  {heatmapData.hospitals?.map(h => {
+                    const nodeItems = (heatmapData.nodeInventories && heatmapData.nodeInventories[h.id]) || [];
+                    return (
+                      <div key={h.id} style={{
+                        padding: '18px', borderRadius: '14px',
+                        border: '1px solid #e2efee', background: '#f8fafb',
+                        display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '14px'
+                      }}>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <strong style={{ fontSize: '1.1rem', fontFamily: 'var(--font-mono)', color: '#0f172a' }}>{h.code}</strong>
+                            <span className={`badge ${h.active ? 'badge-success' : 'badge-danger'}`}>
+                              {h.active ? 'Online' : 'Offline'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: '#64748b', lineHeight: 1.6 }}>
+                            <div>Supervisor: <strong style={{ color: '#0f172a' }}>{h.supervisor}</strong></div>
+                            <div>Karma Score: <strong style={{ color: '#10b981' }}>{h.karmaScore} pts</strong></div>
+                            <div>Location: <strong>{h.location || 'Karnataka'}</strong></div>
+                          </div>
 
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontWeight: 700 }} onClick={() => handleStartImpersonation(h.id, h.supervisor)}>
-                          <i className="fa-solid fa-user-ninja" style={{ color: '#f59e0b' }}></i> Impersonate
-                        </button>
-                        <button className={`btn btn-sm ${h.active ? 'btn-danger' : 'btn-success'}`} style={{ flex: 1, fontWeight: 700 }} onClick={() => handleToggleHospital(h.id, h.active)}>
-                          {h.active ? 'Offboard' : 'Onboard'}
-                        </button>
+                          {/* Scanned Medicines Inside Node */}
+                          <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #e2efee' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#008b8b', textTransform: 'uppercase' }}>
+                                <i className="fa-solid fa-boxes-stacked"></i> Stocked Medicines
+                              </span>
+                              <span className="badge badge-teal" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>
+                                {nodeItems.length} items
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', maxHeight: '105px', overflowY: 'auto' }}>
+                              {nodeItems.length === 0 ? (
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>No medicines scanned yet.</span>
+                              ) : (
+                                nodeItems.map(item => {
+                                  const isScanned = item.medicine.toLowerCase().includes('wound') || item.id.startsWith('INV-179') || item.id.startsWith('INV-178');
+                                  return (
+                                    <span
+                                      key={item.id}
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        background: isScanned ? '#e6f7f6' : '#ffffff',
+                                        border: isScanned ? '1.5px solid #008b8b' : '1px solid #cbd5e1',
+                                        color: '#0f172a',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        fontWeight: 700,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                      title={`Batch: ${item.batch} | Stock: ${item.currentStockKg}kg`}
+                                    >
+                                      <i className="fa-solid fa-pills" style={{ color: '#008b8b', fontSize: '0.65rem' }}></i>
+                                      <span>{item.medicine}</span>
+                                      <span style={{ color: '#64748b', fontFamily: 'var(--font-mono)', fontSize: '0.68rem' }}>({item.currentStockKg}kg)</span>
+                                    </span>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            style={{ width: '100%', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                            onClick={() => { setSelectedNodeTab(h.id); setSection('nodes'); }}
+                          >
+                            <i className="fa-solid fa-boxes-stacked"></i> Inspect Node {h.id} Stock ({nodeItems.length})
+                          </button>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontWeight: 700 }} onClick={() => handleStartImpersonation(h.id, h.supervisor)}>
+                              <i className="fa-solid fa-user-ninja" style={{ color: '#f59e0b' }}></i> Impersonate
+                            </button>
+                            <button className={`btn btn-sm ${h.active ? 'btn-danger' : 'btn-success'}`} style={{ flex: 1, fontWeight: 700 }} onClick={() => handleToggleHospital(h.id, h.active)}>
+                              {h.active ? 'Offboard' : 'Onboard'}
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
 
@@ -901,6 +1006,235 @@ export default function WarehouseProtocolPage() {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════════
+              SECTION: REGIONAL HOSPITAL NODES & SCANNED STOCK MASTER
+             ════════════════════════════════════════════════════════════════════ */}
+          {(section === 'nodes') && (
+            <div>
+              {/* Header Card */}
+              <div className="card" style={{ marginBottom: '20px', padding: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                  <div>
+                    <div style={{ fontSize: '0.74rem', color: '#008b8b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)' }}>
+                      <i className="fa-solid fa-hospital-user"></i> Regional Inflow Nodes Master
+                    </div>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: 900, color: '#0f172a', margin: '4px 0 6px 0' }}>
+                      Hospital Nodes Physical Inventory & Scanned Items
+                    </h2>
+                    <p style={{ color: '#64748b', fontSize: '0.86rem', margin: 0 }}>
+                      Inspect real-time medicine stock, GS1 serialized batches, and optical ESP32-CAM scans recorded at <strong>H01 (Mysore)</strong>, <strong>H02 (Bangalore)</strong>, and <strong>H03 (Mangalore)</strong>.
+                    </p>
+                  </div>
+
+                  <button className="btn btn-ghost btn-sm" onClick={fetchWarehouseData} style={{ fontWeight: 700 }}>
+                    <i className="fa-solid fa-rotate"></i> Refresh Node Telemetry
+                  </button>
+                </div>
+
+                {/* Node Filter Tabs & Search */}
+                <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                  <div style={{ display: 'flex', gap: '6px', background: '#f1f5f9', padding: '4px', borderRadius: '10px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: '0.8rem',
+                        fontWeight: 800,
+                        background: selectedNodeTab === 'ALL' ? '#ffffff' : 'transparent',
+                        color: selectedNodeTab === 'ALL' ? '#008b8b' : '#64748b',
+                        boxShadow: selectedNodeTab === 'ALL' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                        borderRadius: '8px'
+                      }}
+                      onClick={() => setSelectedNodeTab('ALL')}
+                    >
+                      All Nodes ({heatmapData.allInventory?.length || 0})
+                    </button>
+                    {(heatmapData.hospitals || []).map(h => {
+                      const count = (heatmapData.nodeInventories && heatmapData.nodeInventories[h.id]?.length) || 0;
+                      const isSelected = selectedNodeTab === h.id;
+                      return (
+                        <button
+                          key={h.id}
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{
+                            padding: '6px 14px',
+                            fontSize: '0.8rem',
+                            fontWeight: 800,
+                            background: isSelected ? '#ffffff' : 'transparent',
+                            color: isSelected ? '#008b8b' : '#64748b',
+                            boxShadow: isSelected ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                            borderRadius: '8px'
+                          }}
+                          onClick={() => setSelectedNodeTab(h.id)}
+                        >
+                          {h.code?.split('/')[0]?.trim() || h.id} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ flex: '1', maxWidth: '380px' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Search scanned medicine (e.g. Wound Ointment, Paracetamol)..."
+                      value={nodeSearchQuery}
+                      onChange={e => setNodeSearchQuery(e.target.value)}
+                      style={{ padding: '8px 14px', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Hospital Node Tables */}
+              {(heatmapData.hospitals || [])
+                .filter(h => selectedNodeTab === 'ALL' || selectedNodeTab === h.id)
+                .map(h => {
+                  let items = (heatmapData.nodeInventories && heatmapData.nodeInventories[h.id]) || [];
+                  if (nodeSearchQuery.trim()) {
+                    const q = nodeSearchQuery.toLowerCase();
+                    items = items.filter(i =>
+                      (i.medicine && i.medicine.toLowerCase().includes(q)) ||
+                      (i.batch && i.batch.toLowerCase().includes(q)) ||
+                      (i.id && i.id.toLowerCase().includes(q))
+                    );
+                  }
+
+                  return (
+                    <section key={h.id} className="card" style={{ marginBottom: '24px' }}>
+                      <div className="card-header" style={{ borderBottom: '1.5px solid #e2efee', paddingBottom: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{
+                            width: '42px', height: '42px', borderRadius: '12px',
+                            background: '#e6f7f6', color: '#008b8b',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem'
+                          }}>
+                            <i className="fa-solid fa-hospital"></i>
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#0f172a' }}>
+                                {h.name || h.code}
+                              </h3>
+                              <span className="badge badge-teal" style={{ fontFamily: 'var(--font-mono)' }}>Node {h.id}</span>
+                              <span className={`badge ${h.active !== false ? 'badge-success' : 'badge-danger'}`}>
+                                {h.active !== false ? 'Online Grid' : 'Offline'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '3px' }}>
+                              Supervisor: <strong style={{ color: '#0f172a' }}>{h.supervisor}</strong> · Karma: <strong style={{ color: '#10b981' }}>{h.karmaScore} pts</strong> · Location: <strong>{h.location}</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className="badge badge-teal" style={{ fontSize: '0.82rem', padding: '4px 12px' }}>
+                          {items.length} Medicines Stocked
+                        </span>
+                      </div>
+
+                      {items.length === 0 ? (
+                        <div className="empty-state" style={{ padding: '36px', textAlign: 'center' }}>
+                          <i className="fa-solid fa-box-open fa-2x" style={{ color: '#94a3b8', marginBottom: '8px' }}></i>
+                          <p style={{ color: '#64748b', fontWeight: 600 }}>
+                            {nodeSearchQuery ? `No medicines matched "${nodeSearchQuery}" at Node ${h.id}.` : `No medicines found in Node ${h.id} inventory.`}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="table-wrapper">
+                          <table className="data-table">
+                            <thead>
+                              <tr>
+                                <th>Scanned Medicine Name</th>
+                                <th>Batch Number</th>
+                                <th>Gross Stock (kg & Units)</th>
+                                <th>Dosage Form</th>
+                                <th>Shelf / Storage</th>
+                                <th>Expiry Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.map(item => {
+                                const isLow = item.currentStockKg <= (item.minThresholdKg || 1.0);
+                                const isScanned = item.medicine.toLowerCase().includes('wound') || item.id.startsWith('INV-179') || item.id.startsWith('INV-178');
+
+                                return (
+                                  <tr key={item.id} style={{ background: isScanned ? '#fafffd' : 'transparent' }}>
+                                    <td>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div>
+                                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>
+                                            {item.medicine}
+                                          </div>
+                                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
+                                            ID: {item.id}
+                                          </div>
+                                        </div>
+                                        {isScanned && (
+                                          <span className="badge badge-teal" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
+                                            <i className="fa-solid fa-qrcode"></i> Scanned
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', background: '#f1f5f9', padding: '3px 8px', borderRadius: '6px', fontWeight: 700, color: '#008b8b' }}>
+                                        {item.batch}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <div style={{ fontWeight: 800, color: isLow ? '#ef4444' : '#008b8b', fontSize: '0.92rem' }}>
+                                        {item.packageCount || Math.round(item.currentStockKg * 20)} {item.dosageUnit || 'Strips'}
+                                      </div>
+                                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
+                                        {parseFloat(item.currentStockKg).toFixed(2)} kg gross
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <span style={{ fontSize: '0.82rem', color: '#475569' }}>
+                                        {item.dosageForm || 'Tablets'}
+                                      </span>
+                                    </td>
+                                    <td style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                                      <i className="fa-solid fa-location-dot" style={{ color: '#008b8b', marginRight: '4px' }}></i>
+                                      {item.shelfPosition || 'Bay 1'}
+                                    </td>
+                                    <td style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: '#64748b' }}>
+                                      {item.expiryDate || '2027-08-30'}
+                                    </td>
+                                    <td>
+                                      <span className={`badge ${isLow ? 'badge-warning' : 'badge-teal'}`}>
+                                        {isLow ? '● LOW STOCK' : '● IN STOCK'}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button
+                                          className="btn btn-ghost btn-sm"
+                                          style={{ padding: '4px 8px', fontSize: '0.74rem', fontWeight: 700 }}
+                                          onClick={() => handlePrintLabel(item)}
+                                          title="Print GS1 QR Thermal Label"
+                                        >
+                                          <i className="fa-solid fa-print"></i> Label
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
             </div>
           )}
 

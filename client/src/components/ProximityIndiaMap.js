@@ -400,6 +400,15 @@ export default function ProximityIndiaMap({
                   <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                     {node.distanceKm} km · {node.etaText} · <strong style={{ color: '#008b8b' }}>{node.packageCount} {node.dosageUnit}</strong>
                   </div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <i className="fa-solid fa-pills" style={{ color: '#008b8b', fontSize: '0.75rem' }}></i>
+                    <span>{medicineName || node.medicine || 'Available Surplus'}</span>
+                    {node.batch && (
+                      <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', background: '#e2efee', color: '#008b8b', padding: '1px 5px', borderRadius: '4px' }}>
+                        {node.batch}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -427,6 +436,15 @@ export default function ProximityIndiaMap({
             </div>
             <div style={{ fontSize: '1rem', fontWeight: 900, color: '#0f172a', marginTop: '2px' }}>
               {activeDisplayNode.hospitalName} <span style={{ fontSize: '0.78rem', color: '#64748b' }}>({activeDisplayNode.hospitalId})</span>
+            </div>
+            <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#008b8b', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <i className="fa-solid fa-pills"></i>
+              <span>Sourced Item: <strong>{medicineName || activeDisplayNode.medicine || 'Emergency Stock'}</strong></span>
+              {activeDisplayNode.batch && (
+                <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', background: '#ccfbf1', padding: '1px 6px', borderRadius: '4px' }}>
+                  {activeDisplayNode.batch}
+                </span>
+              )}
             </div>
             <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: '2px' }}>
               Distance: <strong>{activeDisplayNode.distanceKm} km</strong> · Transit ETA: <strong>{activeDisplayNode.etaText}</strong> · Karma: <strong>{activeDisplayNode.karmaScore || 78} pts</strong>

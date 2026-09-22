@@ -28,7 +28,21 @@ router.get('/heatmap', async (req, res) => {
       });
       return row;
     });
-    res.json({ hospitals, medicines, heatmap });
+
+    const nodeInventories = {};
+    hospitals.forEach(h => {
+      nodeInventories[h.id] = allInv.filter(i => i.hospitalId === h.id);
+    });
+
+    res.json({ hospitals, medicines, heatmap, nodeInventories, allInventory: allInv });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/admin/node-inventory/:hospitalId
+router.get('/node-inventory/:hospitalId', async (req, res) => {
+  try {
+    const items = await db.getInventoryForHospital(req.params.hospitalId);
+    res.json(items);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

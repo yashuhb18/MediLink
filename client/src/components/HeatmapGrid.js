@@ -23,9 +23,16 @@ export default function HeatmapGrid({ hospitals, heatmapData }) {
     return heatmapData.find(d => d.hospitalId === hospitalId && d.medicine === medName);
   };
 
-  const getCellBadge = (cell) => {
+  const getCellBadge = (cell, medName) => {
     if (!cell || cell.status === 'NONE') {
-      return <span style={{ color: '#94a3b8', background: '#f8fafc', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', border: '1px solid #e2e8f0' }}>— Out of Stock</span>;
+      return (
+        <span
+          title={`${medName}: Out of Stock`}
+          style={{ color: '#94a3b8', background: '#f8fafc', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', border: '1px solid #e2e8f0', display: 'inline-block' }}
+        >
+          — Out of Stock
+        </span>
+      );
     }
 
     const status = cell.status;
@@ -34,27 +41,39 @@ export default function HeatmapGrid({ hospitals, heatmapData }) {
 
     if (status === 'EXPIRED' || color === 'black' || color === 'expired') {
       return (
-        <span style={{ background: '#f1f5f9', color: '#64748b', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 700, border: '1px solid #cbd5e1' }}>
+        <span
+          title={`${medName}: ${qty} (Expired)`}
+          style={{ background: '#f1f5f9', color: '#64748b', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 700, border: '1px solid #cbd5e1', display: 'inline-block' }}
+        >
           <i className="fa-solid fa-ban" style={{ marginRight: '4px' }}></i> {qty} (Expired)
         </span>
       );
     }
     if (status === 'CRITICAL' || status === 'OUT' || color === 'red') {
       return (
-        <span style={{ background: '#fef2f2', color: '#dc2626', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 800, border: '1px solid #fecaca' }}>
+        <span
+          title={`${medName}: ${qty} (Critical Under-Stock)`}
+          style={{ background: '#fef2f2', color: '#dc2626', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 800, border: '1px solid #fecaca', display: 'inline-block' }}
+        >
           <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '4px' }}></i> {qty} (Critical)
         </span>
       );
     }
     if (status === 'LOW' || color === 'yellow') {
       return (
-        <span style={{ background: '#fffbeb', color: '#d97706', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 700, border: '1px solid #fde68a' }}>
+        <span
+          title={`${medName}: ${qty} (Low Reserve)`}
+          style={{ background: '#fffbeb', color: '#d97706', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 700, border: '1px solid #fde68a', display: 'inline-block' }}
+        >
           <i className="fa-solid fa-circle-exclamation" style={{ marginRight: '4px' }}></i> {qty} (Low)
         </span>
       );
     }
     return (
-      <span style={{ background: '#ecfdf5', color: '#10b981', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 700, border: '1px solid #a7f3d0' }}>
+      <span
+        title={`${medName}: ${qty} (Healthy Surplus)`}
+        style={{ background: '#ecfdf5', color: '#10b981', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 700, border: '1px solid #a7f3d0', display: 'inline-block' }}
+      >
         <i className="fa-solid fa-circle-check" style={{ marginRight: '4px' }}></i> {qty} (Healthy)
       </span>
     );
@@ -84,7 +103,7 @@ export default function HeatmapGrid({ hospitals, heatmapData }) {
                 const cell = getCellData(h.id, m);
                 return (
                   <td key={m}>
-                    {getCellBadge(cell)}
+                    {getCellBadge(cell, m)}
                   </td>
                 );
               })}
