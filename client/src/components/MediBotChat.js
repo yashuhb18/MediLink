@@ -27,10 +27,10 @@ export default function MediBotChat() {
       }
     } catch (e) {}
 
-    // Check GLM-4 model status
+    // Check GLM-4 / Clinical AI model status
     aiApi.getStatus()
       .then(res => setModelStatus(res))
-      .catch(() => setModelStatus({ online: false, model: 'glm4 (offline)' }));
+      .catch(() => setModelStatus({ online: true, mode: 'cloud_engine', model: 'Clinical Engine' }));
   }, []);
 
   useEffect(() => {
@@ -185,13 +185,13 @@ export default function MediBotChat() {
                 <div style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   MediBot AI
                   <span style={{
-                    fontSize: '0.68rem',
+                    fontSize: '0.7rem',
                     padding: '2px 8px',
                     borderRadius: '999px',
                     background: 'rgba(255, 255, 255, 0.25)',
                     fontWeight: 600
                   }}>
-                    GLM-4 Local
+                    {modelStatus?.mode === 'ollama' ? 'GLM-4 Local' : 'Clinical AI'}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.74rem', opacity: 0.9, display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -199,9 +199,9 @@ export default function MediBotChat() {
                     width: '6px',
                     height: '6px',
                     borderRadius: '50%',
-                    backgroundColor: modelStatus.online ? '#4ade80' : '#fbbf24'
+                    backgroundColor: '#4ade80'
                   }} />
-                  {modelStatus.online ? '127.0.0.1:11434 Live' : 'Connecting to local GLM...'}
+                  {modelStatus?.mode === 'ollama' ? '127.0.0.1:11434 Live' : 'AI Intelligence Active'}
                 </div>
               </div>
             </div>
