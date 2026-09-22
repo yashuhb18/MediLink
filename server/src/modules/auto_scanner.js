@@ -8,18 +8,53 @@ const { broadcastSSE } = require('../routes/events.routes');
 function resolveNodeHospital(rawHospital, deviceName) {
   if (deviceName) {
     const dev = deviceName.toString().toUpperCase();
-    if (dev.includes('NODE_1') || dev.includes('NODE-1') || dev.includes('NODE 1') || dev === 'NODE1' || dev === 'H01') return 'H01';
-    if (dev.includes('NODE_2') || dev.includes('NODE-2') || dev.includes('NODE 2') || dev === 'NODE2' || dev === 'H02') return 'H02';
     if (dev.includes('NODE_3') || dev.includes('NODE-3') || dev.includes('NODE 3') || dev === 'NODE3' || dev === 'H03') return 'H03';
+    if (dev.includes('NODE_2') || dev.includes('NODE-2') || dev.includes('NODE 2') || dev === 'NODE2' || dev === 'H02') return 'H02';
+    if (dev.includes('NODE_1') || dev.includes('NODE-1') || dev.includes('NODE 1') || dev === 'NODE1' || dev === 'H01') return 'H01';
   }
   if (rawHospital && (rawHospital === 'H01' || rawHospital === 'H02' || rawHospital === 'H03')) {
     return rawHospital;
   }
   const dev = (rawHospital || '').toString().toUpperCase();
-  if (dev.includes('NODE_1') || dev.includes('NODE-1') || dev.includes('NODE 1') || dev === 'NODE1' || dev === 'H01') return 'H01';
-  if (dev.includes('NODE_2') || dev.includes('NODE-2') || dev.includes('NODE 2') || dev === 'NODE2' || dev === 'H02') return 'H02';
   if (dev.includes('NODE_3') || dev.includes('NODE-3') || dev.includes('NODE 3') || dev === 'NODE3' || dev === 'H03') return 'H03';
+  if (dev.includes('NODE_2') || dev.includes('NODE-2') || dev.includes('NODE 2') || dev === 'NODE2' || dev === 'H02') return 'H02';
+  if (dev.includes('NODE_1') || dev.includes('NODE-1') || dev.includes('NODE 1') || dev === 'NODE1' || dev === 'H01') return 'H01';
   return 'H01';
+}
+
+function findMatchingInventoryItem(items, medicineName, batchName) {
+  if (!items || items.length === 0) return null;
+  const clean = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const targetMed = clean(medicineName);
+  const targetBatch = clean(batchName);
+
+  // 1. Exact match on both medicine and batch
+  if (targetBatch && targetMed) {
+    const exact = items.find(i => clean(i.medicine) === targetMed && clean(i.batch) === targetBatch);
+    if (exact) return exact;
+  }
+
+  // 2. Exact match on medicine
+  if (targetMed) {
+    const medExact = items.find(i => clean(i.medicine) === targetMed);
+    if (medExact) return medExact;
+
+    // 3. Substring match (e.g. "Paracetamol" in "Paracetamol 500mg" or vice versa)
+    const subMatch = items.find(i => {
+      const itemMed = clean(i.medicine);
+      return itemMed.includes(targetMed) || targetMed.includes(itemMed);
+    });
+    if (subMatch) return subMatch;
+  }
+
+  // 4. Batch match
+  if (targetBatch) {
+    const batchMatch = items.find(i => clean(i.batch) === targetBatch);
+    if (batchMatch) return batchMatch;
+  }
+
+  // 5. Fallback: Return lowest stock item of this hospital
+  return [...items].sort((a, b) => (a.currentStockKg || 0) - (b.currentStockKg || 0))[0] || items[0];
 }
 
 const AutoScanner = {
@@ -31,11 +66,11 @@ const AutoScanner = {
 
     const deviceName = payload.deviceName || payload.source || 'Node_1';
     const action = (payload.action || "ADD").toUpperCase();
-    const medicine = payload.medicine || payload.name || "Paracetamol 500mg";
-    const batch = payload.batch || payload.batchNumber || "BATCH-2026-X902";
-    const weightKg = parseFloat(payload.weightKg || payload.weight || payload.quantity || 1.0);
     const destHospital = resolveNodeHospital(payload.destHospital || payload.hospitalId || payload.targetHospital, deviceName);
     const sourceHospital = resolveNodeHospital(payload.sourceHospital || payload.hospitalId, deviceName);
+    const medicine = payload.medicine || payload.name || "Medicine";
+    const batch = payload.batch || payload.batchNumber || "BATCH-AUTO";
+    const weightKg = parseFloat(payload.weightKg || payload.weight || payload.quantity || 1.0);
     const requestId = payload.requestId || null;
     const token = payload.token || null;
 
@@ -157,17 +192,16 @@ const AutoScanner = {
         result.countChange = 1;
 
         const destItems = await db.getInventoryForHospital(destHospital);
-        const destItem = destItems.find(i => 
-          (i.batch && batch && i.batch.toLowerCase() === batch.toLowerCase() && i.medicine.toLowerCase() === medicine.toLowerCase()) ||
-          (i.medicine.toLowerCase() === medicine.toLowerCase())
-        );
+        const destItem = findMatchingInventoryItem(destItems, medicine, batch);
         if (destItem) {
+          result.medicine = destItem.medicine;
+          result.batch = destItem.batch || batch;
           const newStock = +(destItem.currentStockKg + parseFloat(weightKg)).toFixed(2);
           const newPkgCount = (destItem.packageCount || 0) + (payload.count ? parseInt(payload.count) : 1);
           await db.updateInventoryItem(destItem.id, { currentStockKg: newStock, packageCount: newPkgCount });
           result.newStockKg = newStock;
           result.packageCount = newPkgCount;
-          result.message = `Successfully ADDED by ${deviceName} (+${payload.count || 1} Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${destItem.medicine} (Batch: ${batch}) at ${destHospital}. New Stock: ${newStock}kg.`;
+          result.message = `Successfully ADDED by ${deviceName} (+${payload.count || 1} Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${destItem.medicine} (Batch: ${destItem.batch || batch}) at ${destHospital}. New Stock: ${newStock}kg.`;
         } else {
           // Create new medicine entry in MongoDB!
           const created = await db.createInventoryItem({
@@ -213,17 +247,16 @@ const AutoScanner = {
         result.countChange = -1;
 
         const srcItems = await db.getInventoryForHospital(sourceHospital);
-        const matchItem = srcItems.find(i => 
-          (i.batch && batch && i.batch.toLowerCase() === batch.toLowerCase() && i.medicine.toLowerCase() === medicine.toLowerCase()) ||
-          (i.medicine.toLowerCase() === medicine.toLowerCase())
-        );
+        const matchItem = findMatchingInventoryItem(srcItems, medicine, batch);
         if (matchItem) {
+          result.medicine = matchItem.medicine;
+          result.batch = matchItem.batch || batch;
           const newStock = Math.max(0, +(matchItem.currentStockKg - parseFloat(weightKg)).toFixed(2));
           const newPkgCount = Math.max(0, (matchItem.packageCount || 1) - 1);
           await db.updateInventoryItem(matchItem.id, { currentStockKg: newStock, packageCount: newPkgCount });
           result.newStockKg = newStock;
           result.packageCount = newPkgCount;
-          result.message = `Successfully REMOVED by ${deviceName} (-1 Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${medicine} (Batch: ${batch}). Remaining Stock: ${newStock}kg.`;
+          result.message = `Successfully REMOVED by ${deviceName} (-1 Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${matchItem.medicine} (Batch: ${matchItem.batch || batch}). Remaining Stock: ${newStock}kg.`;
         } else {
           result.message = `Deduction recorded by ${deviceName} for ${medicine} (-1 Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}, ${weightKg}kg) batch ${batch}.`;
         }

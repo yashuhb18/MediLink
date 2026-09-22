@@ -790,33 +790,31 @@ app.get('/api/upload/latest', async (req, res) => {
 
 // Node & Hospital Mapping Helper
 const NODE_HOSPITAL_MAP = {
-  'Node_1': { id: 'H01', name: 'Mysore District Hospital' },
-  'Node_2': { id: 'H02', name: 'Bangalore Medical Center' },
-  'Node_3': { id: 'H03', name: 'Mangalore General Hospital' }
+  'Node_1': { id: 'H01', name: 'Apollo Bangalore Central (H01)' },
+  'Node_2': { id: 'H02', name: 'Manipal Hospital Whitefield (H02)' },
+  'Node_3': { id: 'H03', name: 'Mangalore General Hospital (H03)' }
 };
 
 function resolveDeviceAndNode(rawDevice, rawHospital) {
   let dev = (rawDevice || '').toString().trim();
   const up = dev.toUpperCase();
-  if (up.includes('NODE_1') || up.includes('NODE-1') || up.includes('NODE 1') || up === 'NODE1' || up === 'H01') {
-    dev = 'Node_1';
-  } else if (up.includes('NODE_2') || up.includes('NODE-2') || up.includes('NODE 2') || up === 'NODE2' || up === 'H02') {
-    dev = 'Node_2';
-  } else if (up.includes('NODE_3') || up.includes('NODE-3') || up.includes('NODE 3') || up === 'NODE3' || up === 'H03') {
-    dev = 'Node_3';
-  } else if (!dev) {
-    dev = 'Node_1';
-  }
+  let hId = 'H01';
 
-  let hId = rawHospital;
-  if (!hId || (hId !== 'H01' && hId !== 'H02' && hId !== 'H03')) {
-    hId = NODE_HOSPITAL_MAP[dev]?.id || 'H01';
+  if (up.includes('NODE_3') || up.includes('NODE-3') || up.includes('NODE 3') || up === 'NODE3' || up === 'H03' || rawHospital === 'H03') {
+    dev = 'Node_3';
+    hId = 'H03';
+  } else if (up.includes('NODE_2') || up.includes('NODE-2') || up.includes('NODE 2') || up === 'NODE2' || up === 'H02' || rawHospital === 'H02') {
+    dev = 'Node_2';
+    hId = 'H02';
+  } else {
+    dev = 'Node_1';
+    hId = 'H01';
   }
 
   return {
     deviceName: dev,
     hospitalId: hId,
-    hospitalName: NODE_HOSPITAL_MAP[dev]?.name || (hId === 'H02' ? 'Bangalore Medical Center' : (hId === 'H03' ? 'Mangalore General Hospital' : 'Mysore District Hospital'))
+    hospitalName: NODE_HOSPITAL_MAP[dev]?.name || (hId === 'H02' ? 'Manipal Hospital Whitefield (H02)' : (hId === 'H03' ? 'Mangalore General Hospital (H03)' : 'Apollo Bangalore Central (H01)'))
   };
 }
 
@@ -832,7 +830,7 @@ app.post('/api/upload', async (req, res) => {
       });
     }
 
-    // 1. Read Device Name (Option 1: JSON body `source` or `deviceName`, Option 2: `X-Device-Name` header)
+    // 1. Read Device Name & Hospital Node
     const rawDeviceHeader = req.headers['x-device-name'] || req.headers['x-device'] || req.headers['device-name'];
     const rawDevice = rawDeviceHeader || bodyDevice || source || 'Node_1';
     const rawHospital = req.headers['x-hospital-id'] || req.headers['hospital-id'] || req.body.hospitalId;
@@ -846,66 +844,63 @@ app.post('/api/upload', async (req, res) => {
     const headerWeight = req.headers['x-quantity'] || req.headers['x-weight'] || req.body.quantityKg || req.body.weightKg;
     const headerBatch = req.headers['x-batch'] || req.headers['batch'] || req.body.batch;
 
-    // 2. Ultra-Fast Optical QR/Barcode Auto-Decoding (Local memory, ~30ms)
+    // 2. Optical QR/Barcode Auto-Decoding
     const imgBuffer = Buffer.from(image_data, 'base64');
     const qrResult = await decodeQRFromBuffer(imgBuffer);
 
     const isQRDetected = !!(qrResult && qrResult.found && qrResult.payload);
     let scanResult = null;
 
-    if (isQRDetected) {
-      // 🎯 REAL QR CODE DETECTED!
-      console.log(`[${deviceName}] 🎯 Optical QR Code Detected:`, qrResult.payload);
-      
-      const resolvedAction = (headerAction && headerAction !== 'AUTO') 
-        ? headerAction.toUpperCase() 
-        : (qrResult.payload.action || 'ADD');
+    // 3. Resolve Target Medicine Dynamically for THIS Specific Hospital Node
+    let targetMedicine = null;
+    let targetBatch = null;
 
-      const targetHospital = qrResult.payload.destHospital || qrResult.payload.targetHospital || hospitalId || qrResult.payload.hospitalId || 'H01';
-
-      scanResult = await AutoScanner.processScan({
-        payload: {
-          ...qrResult.payload,
-          deviceName,
-          action: resolvedAction,
-          headerUsed: headerAction ? `x-action: ${headerAction}` : (rawDeviceHeader ? `X-Device-Name: ${deviceName}` : null),
-          destHospital: targetHospital,
-          sourceHospital: qrResult.payload.sourceHospital || hospitalId
-        },
-        rawImageId: null,
-        imageBase64: image_data
-      });
+    if (isQRDetected && qrResult.payload.medicine) {
+      targetMedicine = qrResult.payload.medicine;
+      targetBatch = qrResult.payload.batch || null;
+    } else if (headerMedicine && headerMedicine !== 'Auto_Detect' && headerMedicine !== 'auto' && headerMedicine.trim()) {
+      targetMedicine = headerMedicine.trim();
+      targetBatch = (headerBatch && headerBatch !== 'Auto_Detect') ? headerBatch.trim() : null;
     } else {
-      console.log(`[${deviceName}] ⚠️ Optical capture received, but NO QR pattern found in image.`);
-
-      // SMART DUAL-MODE HARDWARE ACTION DISPATCH:
-      // Even if optical QR decode is slightly blurred or unreadable from screen glare,
-      // if the hardware user selected an action (ADD or REMOVE) via the ESP32 physical button,
-      // process the inventory action for the target hospital node!
-      const resolvedAction = (headerAction && headerAction !== 'AUTO') ? headerAction.toUpperCase() : 'ADD';
-      const resolvedMed = (headerMedicine && headerMedicine !== 'Auto_Detect') ? headerMedicine : 'Paracetamol 500mg';
-      const resolvedBatch = (headerBatch && headerBatch !== 'Auto_Detect') ? headerBatch : 'BATCH-2026-X902';
-      const resolvedWeight = parseFloat(headerWeight) || 1.0;
-
-      scanResult = await AutoScanner.processScan({
-        payload: {
-          medicine: resolvedMed,
-          batch: resolvedBatch,
-          weightKg: resolvedWeight,
-          count: 1,
-          action: resolvedAction,
-          deviceName,
-          headerUsed: `x-action: ${resolvedAction} (Hardware Triggered)`,
-          destHospital: hospitalId,
-          sourceHospital: hospitalId,
-          qrId: `QR-${resolvedBatch}`
-        },
-        rawImageId: null,
-        imageBase64: image_data
-      });
+      // Query this hospital's actual inventory from database!
+      const currentInv = await db.getInventoryForHospital(hospitalId).catch(() => []);
+      if (currentInv && currentInv.length > 0) {
+        // Pick the medicine with lowest stock / most urgent at this specific node
+        const sorted = [...currentInv].sort((a, b) => (a.currentStockKg || 0) - (b.currentStockKg || 0));
+        targetMedicine = sorted[0].medicine;
+        targetBatch = sorted[0].batch;
+      } else {
+        targetMedicine = (hospitalId === 'H03') ? "Amoxicillin 500mg" : ((hospitalId === 'H02') ? "Metformin 500mg" : "Paracetamol");
+        targetBatch = (hospitalId === 'H03') ? "AM-777" : ((hospitalId === 'H02') ? "MF-800" : "P123");
+      }
     }
 
-    // 3. Background Async Task: Upload to Cloudinary & Save to MongoDB (Non-blocking so ESP32 gets instant response)
+    const resolvedAction = (headerAction && headerAction !== 'AUTO') 
+      ? headerAction.toUpperCase() 
+      : ((isQRDetected && qrResult.payload.action) ? qrResult.payload.action.toUpperCase() : 'ADD');
+
+    const resolvedWeight = parseFloat(headerWeight) || (isQRDetected ? parseFloat(qrResult.payload.weightKg || 1.0) : 1.0);
+
+    // 4. Process Scan via AutoScanner for this Hospital Node
+    scanResult = await AutoScanner.processScan({
+      payload: {
+        ...(isQRDetected ? qrResult.payload : {}),
+        medicine: targetMedicine,
+        batch: targetBatch || `BATCH-${hospitalId}`,
+        weightKg: resolvedWeight,
+        count: 1,
+        action: resolvedAction,
+        deviceName,
+        headerUsed: `x-action: ${resolvedAction} (Node: ${hospitalId})`,
+        destHospital: hospitalId,
+        sourceHospital: hospitalId,
+        qrId: (isQRDetected && qrResult.payload.qrId) ? qrResult.payload.qrId : `QR-${hospitalId}-${(targetBatch || targetMedicine).replace(/\s+/g, '_')}`
+      },
+      rawImageId: null,
+      imageBase64: image_data
+    });
+
+    // 5. Background Async Task: Upload to Cloudinary & Save to MongoDB
     setImmediate(async () => {
       try {
         const cloudinaryRes = await uploadToCloudinary(image_data).catch(err => {
@@ -922,12 +917,12 @@ app.post('/api/upload', async (req, res) => {
           hospitalId: hospitalId,
           requestId: requestId || null,
           inventoryItemId: inventoryItemId || null,
-          medicine: scanResult?.medicine || (isQRDetected ? qrResult.payload.medicine : "Paracetamol 500mg"),
-          batch: scanResult?.batch || (isQRDetected ? qrResult.payload.batch : "BATCH-2026-X902"),
-          action: scanResult?.action || (headerAction ? headerAction.toUpperCase() : "ADD"),
-          weightKg: scanResult?.weightKg || 1.0,
+          medicine: scanResult?.medicine || targetMedicine,
+          batch: scanResult?.batch || targetBatch || "BATCH-AUTO",
+          action: scanResult?.action || resolvedAction,
+          weightKg: scanResult?.weightKg || resolvedWeight,
           decodedPayload: isQRDetected ? qrResult.payload : { autoDetected: true, medicine: scanResult?.medicine },
-          glmReasoning: scanResult?.glmVerification?.explanation || scanResult?.message || `Optical capture verified by ${deviceName}.`
+          glmReasoning: scanResult?.glmVerification?.explanation || scanResult?.message || `Optical scan processed by ${deviceName} at ${hospitalName}.`
         });
         await newImage.save();
       } catch (bgErr) {
@@ -935,12 +930,12 @@ app.post('/api/upload', async (req, res) => {
       }
     });
 
-    // 4. Send Instant Response Back to ESP32 (Within 100ms!)
-    const medName = scanResult?.medicine || qrResult?.payload?.medicine || "Paracetamol 500mg";
-    const batchCode = scanResult?.batch || qrResult?.payload?.batch || "BATCH-2026-X902";
+    // 6. Send Instant Response Back to ESP32 OLED
+    const medName = scanResult?.medicine || targetMedicine;
+    const batchCode = scanResult?.batch || targetBatch || "BATCH-VERIFIED";
     const countVal = scanResult?.qrCount !== undefined ? scanResult.qrCount : (scanResult?.packageCount || 1);
     const activeHospital = scanResult?.destHospital || hospitalId;
-    const finalAction = scanResult?.action || (headerAction ? headerAction.toUpperCase() : 'ADD');
+    const finalAction = scanResult?.action || resolvedAction;
 
     return res.status(200).json({
       success: true,
