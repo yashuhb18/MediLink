@@ -140,10 +140,44 @@ Navigate to **`http://localhost:3000`** in your browser to access the landing pa
 1. Switch to the **Live GPS Fleet** tab.
 2. Watch the live ambulance progress bar glide along the highway corridor in real time (**speed `58 km/h`**, **temperature sensor `3.8°C Safe`**, and direct **Call / WhatsApp buttons** for the driver and facility incharge).
 
+## 📸 7. Physical ESP32-CAM Hardware Scanner & Client Handover
+
+The MediLink ESP32-CAM Optical Scanner is engineered for **zero-configuration client handover**. The client **never** needs to install the Arduino IDE, edit source code, or re-flash firmware.
+
+### ✨ How It Works:
+1. **Zero-Config LAN Auto-Discovery (Default)**:
+   - When the client starts the MediLink backend server (`npm run dev`) and powers on the ESP32-CAM on the same Wi-Fi or mobile hotspot:
+   - The ESP32 broadcasts a UDP beacon on port `5055` and **automatically pairs with the computer's local IP address**.
+   - The ESP32 OLED displays: `=== SERVER LINKED! ===` with the detected IP.
+   - All optical scans are uploaded directly over high-speed local HTTP in **~35ms** (100x faster than cloud tunnels and immune to link expiration or SSL drops).
+
+2. **On-Device Phone Web Setup Portal (If Wi-Fi Changes)**:
+   - If the client takes the ESP32 to a different office, clinic, or uses a new mobile hotspot:
+   - If the ESP32 cannot connect to Wi-Fi within 15 seconds (or if the user **holds the push-button for 3 seconds**):
+     - The ESP32 OLED shows: `=== SETUP PORTAL === Connect Phone: MediLink-Cam-Setup -> 192.168.4.1`.
+     - The client connects their smartphone Wi-Fi to **`MediLink-Cam-Setup`** (no password required).
+     - The client opens `http://192.168.4.1` in Safari or Chrome.
+     - A modern setup screen allows them to:
+       1. Select their Wi-Fi from the auto-scanned list & type their password.
+       2. Keep **"Zero-Config Auto-Discovery"** checked (or type a custom cloud URL).
+       3. Select the Hospital Node (Mysore H01, Bangalore H02, Mangalore H03).
+       4. Click **"Save Settings & Connect"**.
+     - The ESP32 saves the settings to internal flash memory (NVS) and connects. **No coding or USB reflashing required!**
+
+3. **Operating the Scanner Hardware**:
+   - **Single Click**: Toggle between **`ADD (+)`** (receive inventory) and **`REMOVE (-)`** (dispatch consignment).
+   - **Double Click**: Wake up high-resolution camera viewfinder on the 0.96" OLED display.
+   - **Single Click in Viewfinder**: Capture frame and instantly transmit to MediLink AI for GS1 barcode auto-decoding and ledger update.
+   - **Hold Button (3 Seconds)**: Enter Web Configuration Portal at any time.
+
 ---
 
-## 🛠️ 7. Troubleshooting
+## 🛠️ 8. Troubleshooting
 
+- **ESP32-CAM Shows "Server Unreachable"**:
+  - Verify that both the computer running `server` and the ESP32-CAM are connected to the same Wi-Fi router or phone hotspot.
+  - Check that the server terminal shows `UDP Auto-Discovery Beacon: Active (Port 5055)`.
+  - If using Windows Firewall, click "Allow access" on the prompt for Node.js.
 - **MongoDB Connection Error**:
   - Verify that your Atlas IP Whitelist has `0.0.0.0/0` enabled under Network Access.
   - Check that special characters in your password are URL-encoded if necessary.

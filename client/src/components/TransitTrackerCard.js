@@ -34,13 +34,30 @@ export default function TransitTrackerCard({ transfer, onUpdate, userRole = 'REQ
   const driverPhone = transfer.driverPhone || '+91 98455 12345';
   const vehicleNo = transfer.vehicleNumber || 'KA-09-EA-4421';
 
-  // Public Cloudflare tunnel driver app URL (works on any smartphone over 4G/WiFi)
-  const tunnelDriverUrl = 'https://tommy-cost-hear-vice.trycloudflare.com/driver';
-  const driverAppUrl = typeof window !== 'undefined'
-    ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? `${tunnelDriverUrl}?req=${transfer.id}`
-      : `${window.location.origin}/driver?req=${transfer.id}`
-    : `${tunnelDriverUrl}?req=${transfer.id}`;
+  const [lanHost, setLanHost] = useState('');
+
+  useEffect(() => {
+    const apiHost = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+      ? `http://${window.location.hostname}:5000`
+      : 'http://localhost:5000';
+
+    fetch(`${apiHost}/api/server-info`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.serverIp) {
+          setLanHost(`${data.serverIp}:3000`);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const activeHost = typeof window !== 'undefined'
+    ? (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+      ? window.location.host
+      : (lanHost || window.location.host)
+    : 'localhost:3000';
+
+  const driverAppUrl = `${typeof window !== 'undefined' ? window.location.protocol : 'http:'}//${activeHost}/driver?req=${transfer.id}`;
 
   // 1. Listen to Real-Time SSE Stream for TRUE Hardware Coordinates
   useEffect(() => {

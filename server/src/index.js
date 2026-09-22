@@ -9,9 +9,15 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:3001'], credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => callback(null, true), // Allow localhost, LAN IPs, and mobile devices
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// UDP Zero-Config Auto-Discovery for ESP32 Hardware
+const { startDiscovery, getLocalIp } = require('./modules/udp_discovery');
 
 // Routes
 app.use('/api/auth', require('./routes/auth.routes'));
@@ -963,14 +969,35 @@ app.post('/api/upload', async (req, res) => {
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', mode: process.env.DB_MODE, timestamp: new Date().toISOString() }));
 
+// Server Info & Zero-Config Auto-Discovery Info
+app.get('/api/server-info', (req, res) => {
+  const localIp = getLocalIp();
+  res.json({
+    success: true,
+    serverIp: localIp,
+    port: PORT,
+    uploadUrl: `http://${localIp}:${PORT}/api/upload`,
+    discoveryPort: 5055,
+    mode: process.env.DB_MODE || 'memory',
+    timestamp: new Date().toISOString()
+  });
+});
+
 const { connectMongoDB } = require('./config/mongodb');
 
 app.listen(PORT, async () => {
-  console.log(`\n  ╔══════════════════════════════════════════╗`);
-  console.log(`  ║  MediLink AI — Express API Server        ║`);
-  console.log(`  ║  Port: ${PORT}                              ║`);
-  console.log(`  ║  DB Mode: ${(process.env.DB_MODE || 'memory').padEnd(30)}║`);
-  console.log(`  ╚══════════════════════════════════════════╝\n`);
+  const localIp = getLocalIp();
+  console.log(`\n  ╔══════════════════════════════════════════════════════════╗`);
+  console.log(`  ║  MediLink AI — Express API Server                        ║`);
+  console.log(`  ║  Port: ${PORT.toString().padEnd(49)}║`);
+  console.log(`  ║  Local LAN IP: ${localIp.padEnd(42)}║`);
+  console.log(`  ║  ESP32 Upload URL: http://${(localIp + ':' + PORT + '/api/upload').padEnd(36)}║`);
+  console.log(`  ║  UDP Auto-Discovery Beacon: Active (Port 5055)            ║`);
+  console.log(`  ║  DB Mode: ${(process.env.DB_MODE || 'memory').padEnd(46)}║`);
+  console.log(`  ╚══════════════════════════════════════════════════════════╝\n`);
+
+  // Start UDP Discovery Service for ESP32 hardware
+  startDiscovery(PORT);
   
   if (process.env.DB_MODE === 'mongodb' || process.env.MONGODB_URI) {
     try {
