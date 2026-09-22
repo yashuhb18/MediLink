@@ -336,16 +336,16 @@ export default function UniversalLandingPage() {
       status: 'Bangalore Medical (H02)'
     },
     {
-      roleKey: 'pharmacist',
-      role: 'Dispatch Pharmacist',
-      email: 'pharmacist@h02.medilink.ai',
-      pass: 'pharm123',
-      icon: 'fa-prescription-bottle-medical',
-      color: '#7c3aed',
-      bg: '#f5f3ff',
-      borderColor: '#ddd6fe',
-      desc: 'Dual RFID + Barcode Scanner physical workstation verification station.',
-      status: 'Hardware Station'
+      roleKey: 'supervisor-h03',
+      role: 'Hospital Supervisor (H03)',
+      email: 'supervisor@h03.medilink.ai',
+      pass: 'super123',
+      icon: 'fa-hospital-user',
+      color: '#d97706',
+      bg: '#fffbeb',
+      borderColor: '#fde68a',
+      desc: 'Autonomous node supervisor: Bi-directional emergency sourcing, donor fulfillment, live GPS fleet & Karma.',
+      status: 'Mangalore General (H03)'
     },
   ];
 

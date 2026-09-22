@@ -13,6 +13,7 @@ export default function LoginPage() {
     { roleKey: 'nurse', email: 'nurse@h01.medilink.ai', pass: 'nurse123' },
     { roleKey: 'supervisor-req', email: 'supervisor@h01.medilink.ai', pass: 'super123' },
     { roleKey: 'supervisor-src', email: 'supervisor@h02.medilink.ai', pass: 'super123' },
+    { roleKey: 'supervisor-h03', email: 'supervisor@h03.medilink.ai', pass: 'super123' },
     { roleKey: 'pharmacist', email: 'pharmacist@h02.medilink.ai', pass: 'pharm123' },
   ];
 
