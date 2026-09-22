@@ -28,7 +28,7 @@ export default function WarehouseProtocolPage() {
   // ─── Batch Serialization Studio State ───
   const [batchForm, setBatchForm] = useState({
     medicine: 'Paracetamol 500mg',
-    batch: 'BATCH-2026-X902',
+    batch: 'BATCH-PAR-802',
     dosageForm: 'Tablets',
     dosageUnit: 'Strips',
     packageCount: '100',
@@ -575,7 +575,15 @@ export default function WarehouseProtocolPage() {
                         type="text"
                         className="form-input"
                         value={batchForm.medicine}
-                        onChange={e => setBatchForm({ ...batchForm, medicine: e.target.value })}
+                        onChange={e => {
+                          const newMed = e.target.value;
+                          const pfx = newMed.trim().replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'MED';
+                          setBatchForm(prev => ({
+                            ...prev,
+                            medicine: newMed,
+                            batch: prev.batch.startsWith('BATCH-') ? `BATCH-${pfx}-${prev.batch.split('-')[2] || Math.floor(Math.random() * 900 + 100)}` : prev.batch
+                          }));
+                        }}
                         required
                         placeholder="e.g. Paracetamol 500mg"
                       />

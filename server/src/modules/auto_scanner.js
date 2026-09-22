@@ -28,26 +28,34 @@ function findMatchingInventoryItem(items, medicineName, batchName) {
   const targetMed = clean(medicineName);
   const targetBatch = clean(batchName);
 
-  // 1. Exact match on both medicine and batch
-  if (targetBatch && targetMed) {
-    const exact = items.find(i => clean(i.medicine) === targetMed && clean(i.batch) === targetBatch);
-    if (exact) return exact;
-  }
-
-  // 2. Exact match on medicine
+  // If a medicine name was explicitly provided in the scan:
+  // An item can ONLY match if its medicine name matches!
+  // NEVER allow a completely different medicine to match just because the batch is identical.
   if (targetMed) {
+    // 1. Exact match on both medicine and batch
+    if (targetBatch) {
+      const exact = items.find(i => clean(i.medicine) === targetMed && clean(i.batch) === targetBatch);
+      if (exact) return exact;
+    }
+
+    // 2. Exact match on medicine
     const medExact = items.find(i => clean(i.medicine) === targetMed);
     if (medExact) return medExact;
 
-    // 3. Substring match (e.g. "Paracetamol" in "Paracetamol 500mg" or vice versa)
+    // 3. Substring match (e.g. "Body pain" in "Body pain 500mg" or vice versa)
     const subMatch = items.find(i => {
       const itemMed = clean(i.medicine);
       return itemMed.includes(targetMed) || targetMed.includes(itemMed);
     });
     if (subMatch) return subMatch;
+
+    // The scanned medicine name did not match any existing item's name!
+    // Return null so a new, dedicated inventory record is created for this medicine!
+    return null;
   }
 
-  // 4. Batch match
+  // Only if NO medicine name was provided in the scan (e.g. a bare batch tag scan),
+  // then match by batch code alone.
   if (targetBatch) {
     const batchMatch = items.find(i => clean(i.batch) === targetBatch);
     if (batchMatch) return batchMatch;
@@ -194,14 +202,14 @@ const AutoScanner = {
         const destItems = await db.getInventoryForHospital(destHospital);
         const destItem = findMatchingInventoryItem(destItems, medicine, batch);
         if (destItem) {
-          result.medicine = destItem.medicine;
-          result.batch = destItem.batch || batch;
+          result.medicine = (medicine && medicine !== 'QR_Scan_Pending') ? medicine : destItem.medicine;
+          result.batch = batch || destItem.batch;
           const newStock = +(destItem.currentStockKg + parseFloat(weightKg)).toFixed(2);
           const newPkgCount = (destItem.packageCount || 0) + (payload.count ? parseInt(payload.count) : 1);
           await db.updateInventoryItem(destItem.id, { currentStockKg: newStock, packageCount: newPkgCount });
           result.newStockKg = newStock;
           result.packageCount = newPkgCount;
-          result.message = `Successfully ADDED by ${deviceName} (+${payload.count || 1} Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${destItem.medicine} (Batch: ${destItem.batch || batch}) at ${destHospital}. New Stock: ${newStock}kg.`;
+          result.message = `Successfully ADDED by ${deviceName} (+${payload.count || 1} Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${result.medicine} (Batch: ${result.batch}) at ${destHospital}. New Stock: ${newStock}kg.`;
         } else {
           // Create new medicine entry in MongoDB!
           const created = await db.createInventoryItem({
@@ -249,14 +257,14 @@ const AutoScanner = {
         const srcItems = await db.getInventoryForHospital(sourceHospital);
         const matchItem = findMatchingInventoryItem(srcItems, medicine, batch);
         if (matchItem) {
-          result.medicine = matchItem.medicine;
-          result.batch = matchItem.batch || batch;
+          result.medicine = (medicine && medicine !== 'QR_Scan_Pending') ? medicine : matchItem.medicine;
+          result.batch = batch || matchItem.batch;
           const newStock = Math.max(0, +(matchItem.currentStockKg - parseFloat(weightKg)).toFixed(2));
           const newPkgCount = Math.max(0, (matchItem.packageCount || 1) - 1);
           await db.updateInventoryItem(matchItem.id, { currentStockKg: newStock, packageCount: newPkgCount });
           result.newStockKg = newStock;
           result.packageCount = newPkgCount;
-          result.message = `Successfully REMOVED by ${deviceName} (-1 Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${matchItem.medicine} (Batch: ${matchItem.batch || batch}). Remaining Stock: ${newStock}kg.`;
+          result.message = `Successfully REMOVED by ${deviceName} (-1 Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}) for ${result.medicine} (Batch: ${result.batch}). Remaining Stock: ${newStock}kg.`;
         } else {
           result.message = `Deduction recorded by ${deviceName} for ${medicine} (-1 Count: ${qrUpdate.previousCount} ➔ ${qrUpdate.count}, ${weightKg}kg) batch ${batch}.`;
         }
