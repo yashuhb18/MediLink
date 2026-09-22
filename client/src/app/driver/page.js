@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { API_BASE } from '@/lib/api';
 
 export default function RealDriverGpsPage() {
   const [isTracking, setIsTracking] = useState(false);
@@ -30,7 +31,7 @@ export default function RealDriverGpsPage() {
 
   // Fetch active transfers from server
   useEffect(() => {
-    fetch('http://localhost:5000/api/iot/active-transfers')
+    fetch(`${API_BASE}/iot/active-transfers`)
       .then(r => r.json())
       .then(d => {
         if (d.transfers && d.transfers.length > 0) {
@@ -74,7 +75,7 @@ export default function RealDriverGpsPage() {
   // Send REAL GPS coordinates to MediLink server
   const transmitRealGps = async (lat, lng, speed, acc, addr) => {
     try {
-      const res = await fetch('http://localhost:5000/api/iot/transit-gps', {
+      const res = await fetch(`${API_BASE}/iot/transit-gps`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

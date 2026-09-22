@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import InteractiveLifelineFlow from '../components/InteractiveLifelineFlow';
+import { API_BASE } from '@/lib/api';
 
 export default function UniversalLandingPage() {
   const [activeStep, setActiveStep] = useState(0);
@@ -33,7 +34,7 @@ export default function UniversalLandingPage() {
   const fetchCamImages = async () => {
     setIsLoadingCamImages(true);
     try {
-      const res = await fetch('http://localhost:5000/api/iot/images');
+      const res = await fetch(`${API_BASE}/iot/images`);
       if (res.ok) {
         const data = await res.json();
         if (data.images) setCapturedCamImages(data.images);
@@ -53,7 +54,7 @@ export default function UniversalLandingPage() {
     setUploadStatusMsg('Uploading sample frame to MongoDB Atlas...');
     try {
       const sampleB64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAMElEQVR4nO3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOBgB14AATGfF1AAAAAASUVORK5CYII=";
-      const res = await fetch('http://localhost:5000/api/upload', {
+      const res = await fetch(`${API_BASE}/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_data: sampleB64, source: "ESP32-CAM" })

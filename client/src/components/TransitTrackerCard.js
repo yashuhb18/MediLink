@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { transferApi } from '@/lib/api';
+import { transferApi, API_BASE } from '@/lib/api';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function TransitTrackerCard({ transfer, onUpdate, userRole = 'REQUESTING_SUPERVISOR' }) {
@@ -37,11 +37,7 @@ export default function TransitTrackerCard({ transfer, onUpdate, userRole = 'REQ
   const [lanHost, setLanHost] = useState('');
 
   useEffect(() => {
-    const apiHost = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-      ? `http://${window.location.hostname}:5000`
-      : 'http://localhost:5000';
-
-    fetch(`${apiHost}/api/server-info`)
+    fetch(`${API_BASE}/server-info`)
       .then(res => res.json())
       .then(data => {
         if (data && data.serverIp) {
@@ -63,7 +59,7 @@ export default function TransitTrackerCard({ transfer, onUpdate, userRole = 'REQ
   useEffect(() => {
     let es;
     try {
-      es = new EventSource('http://localhost:5000/api/events');
+      es = new EventSource(`${API_BASE}/events`);
       es.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from 'react';
+import { API_BASE } from '../lib/api';
 
 export default function IoTSimulator({ activeRequestId = 'REQ-1001', inventoryItemId = 'INV-201', onSimulatedUpdate }) {
   const [weightKg, setWeightKg] = useState('1.0');
@@ -11,7 +12,7 @@ export default function IoTSimulator({ activeRequestId = 'REQ-1001', inventoryIt
     setLoading(true);
     setStatus('Transmitting Barcode Laser Scanner telemetry...');
     try {
-      const res = await fetch('http://localhost:5000/api/iot/weight', {
+      const res = await fetch(`${API_BASE}/iot/weight`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inventoryItemId, weightKg: parseFloat(weightKg) })
@@ -34,7 +35,7 @@ export default function IoTSimulator({ activeRequestId = 'REQ-1001', inventoryIt
     setLoading(true);
     setStatus('Transmitting MFRC522 RFID + Barcode Scanner payload...');
     try {
-      const res = await fetch('http://localhost:5000/api/iot/verify-tap', {
+      const res = await fetch(`${API_BASE}/iot/verify-tap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId: activeRequestId, scannedRfidUid: rfidUid, measuredWeightKg: parseFloat(weightKg) })

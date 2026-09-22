@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import PortalHeader from '@/components/PortalHeader';
-import { inventoryApi } from '@/lib/api';
+import { inventoryApi, API_BASE } from '@/lib/api';
 
 export default function ClinicalPortal() {
   const [user, setUser] = useState(null);
@@ -20,7 +20,7 @@ export default function ClinicalPortal() {
     handleSearch('', u.hospitalId);
 
     // ⚡ Real-Time SSE Listener for ESP32-CAM Scans & Inventory Updates
-    const es = new EventSource('http://localhost:5000/api/events');
+    const es = new EventSource(`${API_BASE}/events`);
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);

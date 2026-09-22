@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
+import { API_BASE } from '../lib/api';
 
 export default function LiveCameraScanModal() {
   const [scanEvent, setScanEvent] = useState(null);
@@ -8,7 +9,7 @@ export default function LiveCameraScanModal() {
   useEffect(() => {
     let eventSource;
     try {
-      eventSource = new EventSource('http://localhost:5000/api/events/stream');
+      eventSource = new EventSource(`${API_BASE}/events/stream`);
 
       eventSource.onmessage = (event) => {
         try {

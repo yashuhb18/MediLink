@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { API_BASE } from '../lib/api';
 
 export default function SmartLabelModal({ isOpen, onClose, defaultItem }) {
   const [medicine, setMedicine] = useState(defaultItem?.medicine || 'Paracetamol 500mg');
@@ -17,7 +18,7 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem }) {
   // Register or sync QR code with backend whenever generated
   React.useEffect(() => {
     if (isOpen && batch) {
-      fetch('http://localhost:5000/api/iot/qr-codes', {
+      fetch(`${API_BASE}/iot/qr-codes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

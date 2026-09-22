@@ -7,7 +7,7 @@ import SmartLabelModal from '@/components/SmartLabelModal';
 import TransitTrackerCard from '@/components/TransitTrackerCard';
 import ProximityIndiaMap from '@/components/ProximityIndiaMap';
 import KarmaGauge from '@/components/KarmaGauge';
-import { inventoryApi, transferApi, karmaApi, aiApi } from '@/lib/api';
+import { inventoryApi, transferApi, karmaApi, aiApi, API_BASE } from '@/lib/api';
 
 export default function UnifiedSourceSupervisorPortal() {
   const [user, setUser] = useState(null);
@@ -75,7 +75,7 @@ export default function UnifiedSourceSupervisorPortal() {
     window.addEventListener('medilink_data_updated', handleUpdate);
 
     // ⚡ Real-Time SSE Listener
-    const es = new EventSource('http://localhost:5000/api/events');
+    const es = new EventSource(`${API_BASE}/events`);
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);

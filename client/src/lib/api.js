@@ -1,6 +1,14 @@
-const API_BASE = (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
-  ? `${window.location.protocol}//${window.location.hostname}:5000/api`
-  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api');
+export const API_BASE = (() => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
+  }
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5000/api';
+    }
+  }
+  return 'https://medilink-i8km.onrender.com/api';
+})();
 
 export async function apiFetch(endpoint, options = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('medilink_token') : null;

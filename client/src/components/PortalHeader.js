@@ -1,6 +1,8 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 
+import { API_BASE } from '../lib/api';
+
 // Synthesize pleasant emergency alert chime using Web Audio API
 function playNotificationChime() {
   if (typeof window === 'undefined') return;
@@ -61,7 +63,7 @@ export default function PortalHeader({ user, title, subtitle, impersonating, onE
     if (!user) return;
 
     // Fetch initial notification history
-    fetch('http://localhost:5000/api/events/recent')
+    fetch(`${API_BASE}/events/recent`)
       .then(res => res.json())
       .then(history => {
         if (Array.isArray(history)) {
@@ -72,7 +74,7 @@ export default function PortalHeader({ user, title, subtitle, impersonating, onE
       .catch(() => {});
 
     // SSE Live Stream Listener
-    const es = new EventSource('http://localhost:5000/api/events');
+    const es = new EventSource(`${API_BASE}/events`);
 
     es.onmessage = (event) => {
       try {
