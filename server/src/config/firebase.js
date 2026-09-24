@@ -103,6 +103,18 @@ const memoryDb = {
       boxId: 'BOX01-B',
       shelfPosition: 'Bay 4 / Shelf 2',
       targetRfidUid: 'A101-B',
+      transitGps: {
+        lat: null,
+        lng: null,
+        isRealFix: false,
+        accuracy: null,
+        progressPercent: 0,
+        currentSpeedKmH: 0,
+        temperatureC: 4.0,
+        etaMinutes: 45,
+        currentLocationName: 'Awaiting Driver GPS Broadcast...'
+      },
+      liveTrackingStatus: 'ACCEPTED',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -469,6 +481,18 @@ const db = {
       targetRfidUid: data.targetRfidUid || null,
       parentRequestId: data.parentRequestId || null,
       isSplit: data.isSplit || false,
+      transitGps: {
+        lat: null,
+        lng: null,
+        isRealFix: false,
+        accuracy: null,
+        progressPercent: 0,
+        currentSpeedKmH: 0,
+        temperatureC: 4.0,
+        etaMinutes: 45,
+        currentLocationName: 'Awaiting Driver GPS Broadcast...'
+      },
+      liveTrackingStatus: 'PENDING_SOURCE',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       acceptedAt: null, dispatchedAt: null, receivedAt: null, rejectReason: null
     };

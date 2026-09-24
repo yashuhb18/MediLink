@@ -69,7 +69,7 @@ export default function WarehouseProtocolPage() {
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'ESP32_SCAN_SUCCESS' || data.type === 'INVENTORY_UPDATED' || data.type === 'FACTORY_BATCH_CREATED' || data.type === 'EMERGENCY_TRANSFER_REQUESTED') {
+        if (data.type === 'ESP32_SCAN_SUCCESS' || data.type === 'INVENTORY_UPDATED' || data.type === 'FACTORY_BATCH_CREATED' || data.type === 'EMERGENCY_TRANSFER_REQUESTED' || data.type === 'TRANSFER_ACCEPTED' || data.type === 'TRANSIT_GPS_UPDATED' || data.type === 'TRANSFER_DISPATCHED') {
           fetchWarehouseData();
           if (data.result && data.result.message) {
             setRealtimeNotice({

@@ -53,6 +53,7 @@ export default function UnifiedSupervisorPortal() {
   // AI Explanations State
   const [aiExplanations, setAiExplanations] = useState({});
   const [explainingId, setExplainingId] = useState(null);
+  const [acceptedNotice, setAcceptedNotice] = useState(null);
 
   // Label modal
   const [smartLabelOpen, setSmartLabelOpen] = useState(false);
@@ -79,7 +80,30 @@ export default function UnifiedSupervisorPortal() {
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'EMERGENCY_TRANSFER_REQUESTED' || data.type === 'ESP32_SCAN_SUCCESS' || data.type === 'INVENTORY_UPDATED' || data.type === 'FACTORY_BATCH_CREATED' || data.type === 'TRANSIT_GPS_UPDATED' || data.type === 'DRIVER_ASSIGNED') {
+        if (data.type === 'TRANSFER_ACCEPTED') {
+          const currentU = JSON.parse(localStorage.getItem('medilink_user') || '{}');
+          loadData(currentU.hospitalId || u.hospitalId);
+          if (data.requestingHospitalId === currentU.hospitalId || data.sourceHospitalId === currentU.hospitalId) {
+            setAcceptedNotice({
+              id: data.requestId,
+              medicine: data.medicine,
+              quantityKg: data.quantityKg,
+              from: data.sourceHospitalId,
+              to: data.requestingHospitalId,
+              driverName: data.driverName,
+              vehicleNumber: data.vehicleNumber
+            });
+          }
+        } else if (
+          data.type === 'EMERGENCY_TRANSFER_REQUESTED' ||
+          data.type === 'ESP32_SCAN_SUCCESS' ||
+          data.type === 'INVENTORY_UPDATED' ||
+          data.type === 'FACTORY_BATCH_CREATED' ||
+          data.type === 'TRANSIT_GPS_UPDATED' ||
+          data.type === 'DRIVER_ASSIGNED' ||
+          data.type === 'TRANSFER_DISPATCHED' ||
+          data.type === 'TRANSFER_REJECTED'
+        ) {
           const currentU = JSON.parse(localStorage.getItem('medilink_user') || '{}');
           loadData(currentU.hospitalId || u.hospitalId);
         }
@@ -202,8 +226,9 @@ export default function UnifiedSupervisorPortal() {
 
     try {
       await transferApi.acceptTransfer(req.id);
-      alert(`✅ Request ${req.id} accepted! Picklist queued for pharmacist dual-lock verification.`);
+      alert(`✅ Request ${req.id} accepted! Picklist queued and driver live GPS tracking active.`);
       loadData(user.hospitalId);
+      setSection('tracker');
     } catch (err) {
       alert(err.message);
     }
@@ -255,6 +280,69 @@ export default function UnifiedSupervisorPortal() {
         <PortalHeader user={user} subtitle={`Hospital Supervisor Node — ${user.hospitalId} (Bi-directional Sender & Receiver)`} />
 
         <div className="page-body">
+          {/* ✅ Emergency Consignment Accepted Banner */}
+          {acceptedNotice && (
+            <div style={{
+              background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+              border: '2px solid #10b981',
+              borderRadius: '16px',
+              padding: '18px 24px',
+              marginBottom: '20px',
+              boxShadow: '0 10px 25px rgba(16, 185, 129, 0.15)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '16px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{
+                  width: '48px', height: '48px', borderRadius: '12px',
+                  background: '#059669', color: '#ffffff', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
+                }}>
+                  🚑
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 900, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    ✅ Emergency Consignment Accepted & Live
+                  </div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', marginTop: '2px' }}>
+                    {acceptedNotice.medicine} ({acceptedNotice.quantityKg} kg) · {acceptedNotice.from} ➔ {acceptedNotice.to}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#065f46' }}>
+                    Consignment <strong>{acceptedNotice.id}</strong> accepted! Driver GPS transponder is ready to track.
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    setSection('tracker');
+                    setAcceptedNotice(null);
+                  }}
+                  style={{
+                    background: '#0f172a', color: '#ffffff', border: 'none',
+                    padding: '10px 18px', borderRadius: '12px', fontWeight: 800,
+                    fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                    boxShadow: '0 4px 12px rgba(15,23,42,0.2)'
+                  }}
+                >
+                  <span>📡</span> Track Driver GPS & Scanner
+                </button>
+                <button
+                  onClick={() => setAcceptedNotice(null)}
+                  style={{
+                    background: 'transparent', border: '1px solid #a7f3d0', color: '#065f46',
+                    padding: '8px 12px', borderRadius: '10px', fontSize: '0.78rem', cursor: 'pointer'
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 🚨 Emergency Alert Banner (Shown if there is an urgent incoming request targeting this node) */}
           {urgentIncomingPending.length > 0 && (
             <div style={{

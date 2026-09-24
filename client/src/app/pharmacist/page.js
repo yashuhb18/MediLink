@@ -26,6 +26,18 @@ export default function PharmacistPortal() {
     if (u.role !== 'DISPATCH_PHARMACIST') { window.location.href = '/'; return; }
     setUser(u);
     loadTask(u.hospitalId);
+
+    const es = new EventSource(`${API_BASE}/events`);
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'TRANSFER_ACCEPTED' || data.type === 'TRANSFER_DISPATCHED' || data.type === 'INVENTORY_UPDATED') {
+          loadTask(u.hospitalId);
+        }
+      } catch (e) {}
+    };
+
+    return () => es.close();
   }, []);
 
   const loadTask = async (hId) => {

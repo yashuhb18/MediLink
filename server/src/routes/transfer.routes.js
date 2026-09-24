@@ -239,6 +239,22 @@ router.put('/:id/accept', requireRole('SOURCE_SUPERVISOR', 'REQUESTING_SUPERVISO
     });
     await KarmaMarket.applyRule(reqObj.sourceHospitalId, reqObj.urgency === 'HIGH' ? 'ACCEPT_QUICK' : null);
     await db.addAuditLog('TRANSFER_ACCEPTED', `${req.params.id} accepted by ${reqObj.sourceHospitalId}`, reqObj.sourceHospitalId, req.user.id);
+    
+    // ⚡ Broadcast Real-Time SSE to all nodes (requester & sender)
+    broadcastSSE({
+      type: 'TRANSFER_ACCEPTED',
+      requestId: reqObj.id,
+      transfer: updated,
+      sourceHospitalId: reqObj.sourceHospitalId,
+      requestingHospitalId: reqObj.requestingHospitalId,
+      medicine: reqObj.medicine,
+      quantityKg: reqObj.quantityKg,
+      driverName: updated.driverName,
+      driverPhone: updated.driverPhone,
+      vehicleNumber: updated.vehicleNumber,
+      timestamp: new Date().toISOString()
+    });
+
     res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -323,12 +339,21 @@ router.put('/:id/dispatch', requireRole('DISPATCH_PHARMACIST', 'SOURCE_SUPERVISO
     if (!reqObj.rfidVerified || !reqObj.weightVerified) return res.status(400).json({ error: 'Verification not passed' });
 
     Verifier.lockBox(reqObj.targetRfidUid);
-    await db.updateTransferRequest(req.params.id, { status: 'DISPATCHED', dispatchedAt: new Date().toISOString() });
+    const updated = await db.updateTransferRequest(req.params.id, { status: 'DISPATCHED', dispatchedAt: new Date().toISOString() });
     await db.dualInventoryUpdate(reqObj.inventoryItemId, reqObj.requestingHospitalId, reqObj.medicine, reqObj.quantityKg);
     await KarmaMarket.applyRule(reqObj.sourceHospitalId, 'DISPATCH_VERIFIED');
     await db.addAuditLog('DISPATCH_CONFIRMED', `${reqObj.id}: ${reqObj.quantityKg}kg ${reqObj.medicine} dispatched. RFID ${reqObj.targetRfidUid} locked.`, reqObj.sourceHospitalId, req.user.id);
 
-    res.json({ success: true, requestId: reqObj.id });
+    broadcastSSE({
+      type: 'TRANSFER_DISPATCHED',
+      requestId: reqObj.id,
+      transfer: updated,
+      sourceHospitalId: reqObj.sourceHospitalId,
+      requestingHospitalId: reqObj.requestingHospitalId,
+      timestamp: new Date().toISOString()
+    });
+
+    res.json({ success: true, requestId: reqObj.id, transfer: updated });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

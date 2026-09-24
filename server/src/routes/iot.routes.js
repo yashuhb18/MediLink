@@ -123,15 +123,20 @@ router.post('/transit-gps', async (req, res) => {
     if (!reqObj) return res.status(404).json({ error: `Request ${targetRequestId} not found` });
 
     const existingGps = reqObj.transitGps || {};
+    const parsedLat = (lat !== undefined && lat !== null && lat !== '') ? parseFloat(lat) : (existingGps.lat ?? null);
+    const parsedLng = (lng !== undefined && lng !== null && lng !== '') ? parseFloat(lng) : (existingGps.lng ?? null);
+    const hasFix = parsedLat !== null && parsedLng !== null && !isNaN(parsedLat) && !isNaN(parsedLng);
+
     const newGps = {
-      lat: lat !== undefined ? parseFloat(lat) : (existingGps.lat ?? 12.9716),
-      lng: lng !== undefined ? parseFloat(lng) : (existingGps.lng ?? 77.5946),
+      lat: hasFix ? parsedLat : null,
+      lng: hasFix ? parsedLng : null,
+      isRealFix: hasFix,
       progressPercent: progressPercent !== undefined ? Math.min(100, Math.max(0, parseInt(progressPercent))) : (existingGps.progressPercent ?? 0),
       currentSpeedKmH: currentSpeedKmH !== undefined ? Math.round(parseFloat(currentSpeedKmH)) : (existingGps.currentSpeedKmH ?? 0),
       temperatureC: temperatureC !== undefined ? +(parseFloat(temperatureC)).toFixed(1) : (existingGps.temperatureC ?? 4.0),
       etaMinutes: etaMinutes !== undefined ? parseInt(etaMinutes) : (existingGps.etaMinutes ?? 35),
-      currentLocationName: currentLocationName || existingGps.currentLocationName || 'En-Route (Driver Phone GPS)',
-      accuracy: accuracy !== undefined ? +(parseFloat(accuracy)).toFixed(1) : (existingGps.accuracy ?? 3.5),
+      currentLocationName: currentLocationName || existingGps.currentLocationName || (hasFix ? 'En-Route (Driver Phone GPS)' : 'Awaiting Driver GPS Broadcast...'),
+      accuracy: (accuracy !== undefined && accuracy !== null && accuracy !== '') ? +(parseFloat(accuracy)).toFixed(1) : (existingGps.accuracy ?? null),
       updatedAt: new Date().toISOString()
     };
 

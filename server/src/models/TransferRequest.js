@@ -20,15 +20,17 @@ const transferRequestSchema = new mongoose.Schema({
   requesterContactPhone: { type: String, default: '+91 98450 12345' },
   senderContactName: { type: String, default: 'Dr. Ananya Sharma (Chief Pharmacist)' },
   senderContactPhone: { type: String, default: '+91 98800 67890' },
-  // Live GPS Telemetry
+  // Live GPS Telemetry (Initialized null until driver device broadcasts real coordinates)
   transitGps: {
-    lat: { type: Number, default: 12.9716 },
-    lng: { type: Number, default: 77.5946 },
+    lat: { type: Number, default: null },
+    lng: { type: Number, default: null },
+    isRealFix: { type: Boolean, default: false },
+    accuracy: { type: Number, default: null },
     progressPercent: { type: Number, default: 0 },
     currentSpeedKmH: { type: Number, default: 0 },
-    temperatureC: { type: Number, default: 4.2 },
+    temperatureC: { type: Number, default: 4.0 },
     etaMinutes: { type: Number, default: 45 },
-    currentLocationName: { type: String, default: 'Hospital Dispatch Bay' }
+    currentLocationName: { type: String, default: 'Awaiting Driver GPS Broadcast...' }
   },
   liveTrackingStatus: { type: String, default: 'PREPARING_CONSIGNMENT' },
   rfidVerified: { type: Boolean, default: false },

@@ -3,8 +3,14 @@ export const API_BASE = (() => {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
   }
   if (typeof window !== 'undefined') {
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://localhost:5000/api';
+    const host = window.location.hostname;
+    // Localhost, loopback, or any IPv4 LAN address (e.g. 192.168.x.x, 10.x.x.x, 172.x.x.x)
+    if (host === 'localhost' || host === '127.0.0.1' || /^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
+      return `${window.location.protocol}//${host}:5000/api`;
+    }
+    // Cloudflare tunnel, ngrok, localtunnel, etc.
+    if (host.includes('trycloudflare.com') || host.includes('ngrok') || host.includes('loca.lt')) {
+      return `${window.location.origin}/api`;
     }
   }
   return 'https://medilink-i8km.onrender.com/api';

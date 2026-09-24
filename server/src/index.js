@@ -623,25 +623,38 @@ app.get('/driver', (req, res) => {
     let lastGeocodeTime = 0;
     let realAddress = 'Acquiring physical street location...';
     let pathHistory = [];
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentReqId = urlParams.get('req') || 'REQ-1001';
+    
+    // Dynamically update UI with consignment details
+    const consignmentEl = document.getElementById('consignmentTag');
+    if (consignmentEl) consignmentEl.innerText = 'Consignment #' + currentReqId;
 
-    // Initialize Leaflet map
+    fetch('/api/iot/active-transfers')
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.transfers && d.transfers.length > 0) {
+          const match = d.transfers.find(t => t.id === currentReqId) || d.transfers[0];
+          if (match) {
+            document.getElementById('medName').innerText = (match.medicine || 'Medicine') + ' · ' + (match.quantityKg || 1.0) + ' kg';
+            if (consignmentEl) consignmentEl.innerText = 'Consignment #' + match.id;
+          }
+        }
+      })
+      .catch(() => {});
+
+    // Initialize Leaflet map (clean street layer)
     const map = L.map('map', {
-      center: [12.9716, 77.5946], // temporary fallback until device GPS fix
-      zoom: 17,
+      center: [12.9716, 77.5946],
+      zoom: 16,
       zoomControl: false,
       attributionControl: false
     });
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
-    // Accuracy circle
-    let accCircle = L.circle([12.9716, 77.5946], {
-      radius: 20,
-      color: '#2563eb',
-      fillColor: '#60a5fa',
-      fillOpacity: 0.15,
-      weight: 1.5
-    }).addTo(map);
+    let accCircle = null;
+    let vMarker = null;
 
     // Real-time walking path breadcrumbs
     let pathLine = L.polyline([], {
@@ -657,8 +670,6 @@ app.get('/driver', (req, res) => {
       iconSize: [44, 44],
       iconAnchor: [22, 22]
     });
-
-    const vMarker = L.marker([12.9716, 77.5946], { icon: vehicleIcon }).addTo(map);
 
     // Reverse Geocoding via OpenStreetMap (Gets exact real building & street name)
     async function reverseGeocode(lat, lng) {
@@ -687,7 +698,7 @@ app.get('/driver', (req, res) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            requestId: 'REQ-1001',
+            requestId: currentReqId,
             lat, lng,
             accuracy: acc,
             currentSpeedKmH: speed,
@@ -715,9 +726,24 @@ app.get('/driver', (req, res) => {
       document.getElementById('coordsText').innerText = 'Lat: ' + lat.toFixed(6) + '°, Lng: ' + lng.toFixed(6) + '°';
 
       // Update map to exact physical street
-      vMarker.setLatLng([lat, lng]);
-      accCircle.setLatLng([lat, lng]);
-      accCircle.setRadius(Math.max(10, parseFloat(acc)));
+      if (!vMarker) {
+        vMarker = L.marker([lat, lng], { icon: vehicleIcon }).addTo(map);
+      } else {
+        vMarker.setLatLng([lat, lng]);
+      }
+
+      if (!accCircle) {
+        accCircle = L.circle([lat, lng], {
+          radius: Math.max(10, parseFloat(acc)),
+          color: '#2563eb',
+          fillColor: '#60a5fa',
+          fillOpacity: 0.15,
+          weight: 1.5
+        }).addTo(map);
+      } else {
+        accCircle.setLatLng([lat, lng]);
+        accCircle.setRadius(Math.max(10, parseFloat(acc)));
+      }
 
       pathHistory.push([lat, lng]);
       pathLine.setLatLngs(pathHistory);
@@ -1010,10 +1036,22 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', mode: process.env.
 // Server Info & Zero-Config Auto-Discovery Info
 app.get('/api/server-info', (req, res) => {
   const localIp = getLocalIp();
+  let tunnelUrl = null;
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const tunnelFile = path.join(__dirname, '../active_tunnel.json');
+    if (fs.existsSync(tunnelFile)) {
+      const data = JSON.parse(fs.readFileSync(tunnelFile, 'utf8'));
+      if (data && data.tunnelUrl) tunnelUrl = data.tunnelUrl;
+    }
+  } catch (e) {}
+
   res.json({
     success: true,
     serverIp: localIp,
     port: PORT,
+    tunnelUrl: tunnelUrl,
     uploadUrl: `http://${localIp}:${PORT}/api/upload`,
     discoveryPort: 5055,
     mode: process.env.DB_MODE || 'memory',
