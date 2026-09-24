@@ -7,6 +7,7 @@ import SmartLabelModal from '@/components/SmartLabelModal';
 import TransitTrackerCard from '@/components/TransitTrackerCard';
 import ProximityIndiaMap from '@/components/ProximityIndiaMap';
 import KarmaGauge from '@/components/KarmaGauge';
+import { QRCodeSVG } from 'qrcode.react';
 import { inventoryApi, transferApi, karmaApi, aiApi, API_BASE } from '@/lib/api';
 
 export default function UnifiedSourceSupervisorPortal() {
@@ -17,6 +18,11 @@ export default function UnifiedSourceSupervisorPortal() {
   const [outgoingRequests, setOutgoingRequests] = useState([]);
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [karmaData, setKarmaData] = useState({ score: 78, history: [] });
+
+  // Server discovery for Driver QR Code
+  const [serverIp, setServerIp] = useState('');
+  const [tunnelUrl, setTunnelUrl] = useState('');
+  const [handoffModalReq, setHandoffModalReq] = useState(null);
 
   // ─── Emergency Sourcing Form State (Acting as Requester) ───
   const [manualMedicine, setManualMedicine] = useState('Paracetamol 500mg');
@@ -114,6 +120,19 @@ export default function UnifiedSourceSupervisorPortal() {
       window.removeEventListener('medilink_data_updated', handleUpdate);
       es.close();
     };
+  }, []);
+
+  // Fetch local server IP and active tunnel URL for mobile driver QR code
+  useEffect(() => {
+    fetch(`${API_BASE}/server-info`)
+      .then(res => res.json())
+      .then(data => {
+        if (data) {
+          if (data.serverIp) setServerIp(data.serverIp);
+          if (data.tunnelUrl) setTunnelUrl(data.tunnelUrl);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Fetch candidate proximity nodes when medicine name changes
@@ -226,9 +245,9 @@ export default function UnifiedSourceSupervisorPortal() {
 
     try {
       await transferApi.acceptTransfer(req.id);
-      alert(`✅ Request ${req.id} accepted! Picklist queued and driver live GPS tracking active.`);
       loadData(user.hospitalId);
-      setSection('tracker');
+      // Sender stays on incoming dispatch queue; show Driver QR Modal to hand to the driver
+      setHandoffModalReq(req);
     } catch (err) {
       alert(err.message);
     }
@@ -246,10 +265,16 @@ export default function UnifiedSourceSupervisorPortal() {
         senderContactPhone: '+91 98800 67890'
       });
       await transferApi.acceptTransfer(assigningReq.id);
-      alert(`✅ Driver ${assignedDriverName} assigned & request ${assigningReq.id} accepted for dispatch!`);
+      const reqToHandOff = {
+        ...assigningReq,
+        driverName: assignedDriverName,
+        driverPhone: assignedDriverPhone,
+        vehicleNumber: assignedVehicleNo
+      };
       setAssigningReq(null);
       loadData(user.hospitalId);
-      setSection('tracker');
+      // Sender stays on dispatch queue; show Driver QR Modal so driver can scan and broadcast directly to requesting node
+      setHandoffModalReq(reqToHandOff);
     } catch (err) {
       alert(`Driver Assignment Error: ${err.message}`);
     }
@@ -1235,6 +1260,91 @@ export default function UnifiedSourceSupervisorPortal() {
                 <button type="submit" className="btn btn-danger">Confirm Rejection</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Driver GPS Hand-off Modal for Sender ─── */}
+      {handoffModalReq && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.82)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 10000, padding: '20px'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '24px', maxWidth: '520px', width: '100%',
+            padding: '28px', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', textAlign: 'center'
+          }}>
+            <div style={{
+              width: '60px', height: '60px', borderRadius: '50%', background: '#ecfdf5',
+              color: '#059669', fontSize: '1.8rem', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', margin: '0 auto 14px auto', border: '2px solid #a7f3d0'
+            }}>
+              🚑
+            </div>
+
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '1.3rem', fontWeight: 900, color: '#0f172a' }}>
+              Consignment Accepted & Dispatched!
+            </h3>
+            
+            <p style={{ fontSize: '0.86rem', color: '#64748b', margin: '0 0 18px 0', lineHeight: 1.5 }}>
+              Hand this QR code to driver <strong style={{ color: '#0f172a' }}>{handoffModalReq.driverName || assignedDriverName || 'Ramesh Gowda'}</strong> ({handoffModalReq.vehicleNumber || assignedVehicleNo || 'KA-01-MD-9901'}).
+              <br/>
+              <span style={{ color: '#008b8b', fontWeight: 800 }}>
+                📍 Driver live GPS movement will stream straight to requesting hospital ({handoffModalReq.requestingHospitalId || 'H01'})!
+              </span>
+            </p>
+
+            <div style={{
+              display: 'inline-block', padding: '16px', background: '#ffffff',
+              borderRadius: '20px', border: '2px solid #e2e8f0', boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
+              marginBottom: '14px'
+            }}>
+              <QRCodeSVG
+                value={
+                  tunnelUrl
+                    ? `${tunnelUrl}/driver?req=${handoffModalReq.id}`
+                    : (serverIp
+                        ? `http://${serverIp}:3000/driver?req=${handoffModalReq.id}`
+                        : (typeof window !== 'undefined' ? `${window.location.origin}/driver?req=${handoffModalReq.id}` : `http://localhost:3000/driver?req=${handoffModalReq.id}`))
+                }
+                size={210}
+                level="M"
+                includeMargin={false}
+              />
+            </div>
+
+            <div style={{
+              fontSize: '0.78rem', color: '#0f172a', marginBottom: '18px', background: '#f8fafc',
+              padding: '10px 14px', borderRadius: '12px', border: '1px solid #e2e8f0', wordBreak: 'break-all',
+              fontFamily: 'monospace', fontWeight: 700
+            }}>
+              {tunnelUrl
+                ? `${tunnelUrl}/driver?req=${handoffModalReq.id}`
+                : (serverIp
+                    ? `http://${serverIp}:3000/driver?req=${handoffModalReq.id}`
+                    : (typeof window !== 'undefined' ? `${window.location.origin}/driver?req=${handoffModalReq.id}` : `http://localhost:3000/driver?req=${handoffModalReq.id}`))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <a
+                href={`/driver?req=${handoffModalReq.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost"
+                style={{ fontSize: '0.84rem', fontWeight: 800, padding: '10px 16px', border: '1px solid #cbd5e1' }}
+              >
+                ↗ Open Driver Companion
+              </a>
+              <button
+                className="btn btn-primary"
+                style={{ fontWeight: 800, padding: '10px 24px', background: '#008b8b' }}
+                onClick={() => setHandoffModalReq(null)}
+              >
+                Done · Stay in Dispatch Queue
+              </button>
+            </div>
           </div>
         </div>
       )}

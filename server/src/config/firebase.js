@@ -443,7 +443,7 @@ const db = {
         if (filter.sourceHospitalId) query.sourceHospitalId = filter.sourceHospitalId;
         if (filter.status) query.status = filter.status;
         const list = await TransferRequest.find(query).sort({ createdAt: -1 }).lean();
-        if (list && list.length > 0) return list.map(toPlain);
+        if (list) return list.map(toPlain);
       } catch (err) {
         console.warn('[MongoDB] getTransferRequests fallback:', err.message);
       }

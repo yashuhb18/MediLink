@@ -168,14 +168,51 @@ router.post('/transit-gps', async (req, res) => {
   }
 });
 
+// GET /api/iot/transit-gps/:id — Zero-Auth Telemetry Polling Endpoint for Frontend Cards & Driver App
+router.get('/transit-gps/:id', async (req, res) => {
+  try {
+    const transfer = await db.getTransferRequest(req.params.id);
+    if (!transfer) return res.status(404).json({ error: `Transfer ${req.params.id} not found` });
+    res.json({
+      success: true,
+      requestId: transfer.id,
+      transitGps: transfer.transitGps || {},
+      liveTrackingStatus: transfer.liveTrackingStatus,
+      status: transfer.status,
+      medicine: transfer.medicine,
+      quantityKg: transfer.quantityKg,
+      dosageUnit: transfer.dosageUnit,
+      packageCount: transfer.packageCount,
+      requestingHospitalId: transfer.requestingHospitalId,
+      sourceHospitalId: transfer.sourceHospitalId,
+      driverName: transfer.driverName,
+      driverPhone: transfer.driverPhone,
+      vehicleNumber: transfer.vehicleNumber
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/iot/active-transfers — List active consignments ready for driver tracking
 router.get('/active-transfers', async (req, res) => {
   try {
-    const inTransit = await db.getTransferRequests({ status: 'IN_TRANSIT' });
-    const accepted = await db.getTransferRequests({ status: 'ACCEPTED' });
+    const { req: requestedId } = req.query;
+    const all = await db.getTransferRequests();
+    // Return all consignments that are not terminated (rejected or received)
+    const active = all.filter(t => t.status !== 'REJECTED' && t.status !== 'RECEIVED');
+    
+    // If a specific req was queried, ensure it is placed first
+    if (requestedId) {
+      const specific = all.find(t => t.id === requestedId);
+      if (specific && !active.some(t => t.id === requestedId)) {
+        active.unshift(specific);
+      }
+    }
+
     res.json({
       success: true,
-      transfers: [...inTransit, ...accepted]
+      transfers: active.length > 0 ? active : all
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

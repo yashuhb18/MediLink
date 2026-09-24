@@ -104,6 +104,9 @@ export default function UnifiedSupervisorPortal() {
           data.type === 'TRANSFER_DISPATCHED' ||
           data.type === 'TRANSFER_REJECTED'
         ) {
+          if (data.type === 'TRANSIT_GPS_UPDATED') {
+            window.dispatchEvent(new CustomEvent('medilink_gps_update', { detail: data }));
+          }
           const currentU = JSON.parse(localStorage.getItem('medilink_user') || '{}');
           loadData(currentU.hospitalId || u.hospitalId);
         }

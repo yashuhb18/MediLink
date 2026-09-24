@@ -34,6 +34,8 @@ export default function RealDriverGpsPage() {
   const watchIdRef = useRef(null);
   const lastGeocodeTimeRef = useRef(0);
 
+  const activeReqIdRef = useRef('');
+
   // 1. Parse URL Parameter (?req=REQ-XXXX) and Fetch Consignments
   useEffect(() => {
     let reqFromUrl = null;
@@ -42,7 +44,36 @@ export default function RealDriverGpsPage() {
       reqFromUrl = urlParams.get('req');
     }
 
-    fetch(`${API_BASE}/iot/active-transfers`)
+    if (reqFromUrl) {
+      activeReqIdRef.current = reqFromUrl;
+      setSelectedReqId(reqFromUrl);
+
+      // Fetch consignment telemetry & metadata directly
+      fetch(`${API_BASE}/iot/transit-gps/${reqFromUrl}`)
+        .then(r => r.json())
+        .then(d => {
+          if (d && d.success) {
+            setCurrentTransfer({
+              id: d.requestId,
+              medicine: d.medicine || 'Paracetamol 500mg',
+              quantityKg: d.quantityKg || 1.0,
+              dosageUnit: d.dosageUnit || 'Strips',
+              packageCount: d.packageCount || 20,
+              requestingHospitalId: d.requestingHospitalId || 'H01',
+              sourceHospitalId: d.sourceHospitalId || 'H02',
+              driverName: d.driverName || 'Ramesh Gowda (Ambulance Fleet)',
+              vehicleNumber: d.vehicleNumber || 'KA-01-MD-9901',
+              transitGps: d.transitGps
+            });
+            if (d.transitGps?.progressPercent) {
+              setProgressPercent(d.transitGps.progressPercent);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
+    fetch(`${API_BASE}/iot/active-transfers${reqFromUrl ? `?req=${reqFromUrl}` : ''}`)
       .then(r => r.json())
       .then(d => {
         if (d.transfers && d.transfers.length > 0) {
@@ -52,19 +83,24 @@ export default function RealDriverGpsPage() {
             : d.transfers[0];
 
           const activeId = matched ? matched.id : (reqFromUrl || d.transfers[0].id);
+          activeReqIdRef.current = activeId;
           setSelectedReqId(activeId);
-          setCurrentTransfer(matched || d.transfers[0]);
+          if (matched) setCurrentTransfer(matched);
 
           if (matched && matched.transitGps?.progressPercent) {
             setProgressPercent(matched.transitGps.progressPercent);
           }
         } else if (reqFromUrl) {
+          activeReqIdRef.current = reqFromUrl;
           setSelectedReqId(reqFromUrl);
         }
       })
       .catch((err) => {
         console.warn('Failed to load active consignments:', err);
-        if (reqFromUrl) setSelectedReqId(reqFromUrl);
+        if (reqFromUrl) {
+          activeReqIdRef.current = reqFromUrl;
+          setSelectedReqId(reqFromUrl);
+        }
       });
   }, []);
 
@@ -99,7 +135,12 @@ export default function RealDriverGpsPage() {
   // Send REAL GPS coordinates to MediLink server
   const transmitRealGps = async (lat, lng, speed, acc, addr, overrideProgress, overrideStatus) => {
     try {
-      const curReq = selectedReqId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('req') : null) || 'REQ-1001';
+      let curReq = activeReqIdRef.current || selectedReqId;
+      if (!curReq && typeof window !== 'undefined') {
+        curReq = new URLSearchParams(window.location.search).get('req');
+      }
+      if (!curReq) curReq = 'REQ-1001';
+
       const currentProg = overrideProgress !== undefined ? overrideProgress : progressPercent;
 
       const res = await fetch(`${API_BASE}/iot/transit-gps`, {

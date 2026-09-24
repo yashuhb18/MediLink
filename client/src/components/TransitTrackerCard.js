@@ -88,7 +88,95 @@ export default function TransitTrackerCard({ transfer, onUpdate, userRole = 'REQ
     }
   };
 
-  // 1. Listen to Real-Time SSE Stream for TRUE Hardware Coordinates
+  // Telemetry Applicator: updates local coordinates, speed, address, packet count, and animates Leaflet Map
+  const applyGpsTelemetry = (gps) => {
+    if (!gps || gps.lat === null || gps.lng === null || isNaN(gps.lat) || isNaN(gps.lng)) return;
+
+    setPhoneGpsActive(true);
+    setLocalCoords({ lat: gps.lat, lng: gps.lng });
+    if (gps.currentSpeedKmH !== undefined && gps.currentSpeedKmH !== null) setLocalSpeed(gps.currentSpeedKmH);
+    if (gps.accuracy !== undefined && gps.accuracy !== null) setLocalAccuracy(gps.accuracy);
+    if (gps.temperatureC !== undefined && gps.temperatureC !== null) setLocalTemp(gps.temperatureC);
+    if (gps.currentLocationName) setLocalLocation(gps.currentLocationName);
+
+    setPacketCount(c => c + 1);
+    setLastPacketTime(new Date().toLocaleTimeString());
+
+    // Update Leaflet Map dynamically to exact real coordinates
+    if (mapInstanceRef.current && window.L) {
+      const L = window.L;
+
+      // Fly to real street level coordinates
+      mapInstanceRef.current.flyTo([gps.lat, gps.lng], 17, { duration: 0.8 });
+
+      if (markerRef.current) {
+        markerRef.current.setLatLng([gps.lat, gps.lng]);
+      } else {
+        const icon = L.divIcon({
+          className: 'live-ambulance-marker',
+          html: `
+            <div style="position:relative; display:flex; align-items:center; justify-content:center; transform:translate(-50%, -50%);">
+              <div style="position:absolute; width:46px; height:46px; border-radius:50%; background:rgba(16, 185, 129, 0.4); animation:pulse 1.8s infinite;"></div>
+              <div style="width:34px; height:34px; border-radius:50%; background:#0f172a; border:3px solid #ffffff; box-shadow:0 4px 14px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:15px;">
+                🚑
+              </div>
+            </div>
+          `,
+          iconSize: [46, 46],
+          iconAnchor: [23, 23]
+        });
+        markerRef.current = L.marker([gps.lat, gps.lng], { icon }).addTo(mapInstanceRef.current);
+      }
+
+      // Accuracy circle
+      if (accuracyCircleRef.current) {
+        accuracyCircleRef.current.setLatLng([gps.lat, gps.lng]);
+        accuracyCircleRef.current.setRadius(Math.max(10, gps.accuracy || 15));
+      } else {
+        accuracyCircleRef.current = L.circle([gps.lat, gps.lng], {
+          radius: Math.max(10, gps.accuracy || 15),
+          color: '#10b981',
+          fillColor: '#34d399',
+          fillOpacity: 0.18,
+          weight: 1.5
+        }).addTo(mapInstanceRef.current);
+      }
+
+      // Real movement breadcrumbs trail
+      if (pathPolylineRef.current) {
+        pathHistoryRef.current.push([gps.lat, gps.lng]);
+        pathPolylineRef.current.setLatLngs(pathHistoryRef.current);
+      } else {
+        pathHistoryRef.current = [[gps.lat, gps.lng]];
+        pathPolylineRef.current = L.polyline(pathHistoryRef.current, {
+          color: '#0f172a',
+          weight: 4,
+          opacity: 0.85
+        }).addTo(mapInstanceRef.current);
+      }
+    }
+  };
+
+  // 1A. Sync from transfer prop if parent re-fetches
+  useEffect(() => {
+    if (transfer?.transitGps?.lat && transfer?.transitGps?.lng) {
+      applyGpsTelemetry(transfer.transitGps);
+    }
+  }, [transfer?.transitGps?.lat, transfer?.transitGps?.lng, transfer?.transitGps?.updatedAt]);
+
+  // 1B. Listen to Window Telemetry Event (broadcast by page-level SSE)
+  useEffect(() => {
+    const handleGpsUpdate = (e) => {
+      const data = e.detail;
+      if (data && (!data.requestId || data.requestId === transfer.id) && data.transitGps) {
+        applyGpsTelemetry(data.transitGps);
+      }
+    };
+    window.addEventListener('medilink_gps_update', handleGpsUpdate);
+    return () => window.removeEventListener('medilink_gps_update', handleGpsUpdate);
+  }, [transfer.id]);
+
+  // 1C. Listen to Real-Time SSE Stream directly
   useEffect(() => {
     let es;
     try {
@@ -97,72 +185,7 @@ export default function TransitTrackerCard({ transfer, onUpdate, userRole = 'REQ
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'TRANSIT_GPS_UPDATED' && (!data.requestId || data.requestId === transfer.id)) {
-            const gps = data.transitGps;
-            if (gps && gps.lat && gps.lng) {
-              setPhoneGpsActive(true);
-              setLocalCoords({ lat: gps.lat, lng: gps.lng });
-              if (gps.currentSpeedKmH !== undefined) setLocalSpeed(gps.currentSpeedKmH);
-              if (gps.accuracy !== undefined) setLocalAccuracy(gps.accuracy);
-              if (gps.temperatureC !== undefined) setLocalTemp(gps.temperatureC);
-              if (gps.currentLocationName) setLocalLocation(gps.currentLocationName);
-
-              setPacketCount(c => c + 1);
-              setLastPacketTime(new Date().toLocaleTimeString());
-
-              // Update Leaflet Map dynamically to exact real coordinates
-              if (mapInstanceRef.current && window.L) {
-                const L = window.L;
-
-                // Fly to real street level coordinates
-                mapInstanceRef.current.flyTo([gps.lat, gps.lng], 17, { duration: 1.0 });
-
-                if (markerRef.current) {
-                  markerRef.current.setLatLng([gps.lat, gps.lng]);
-                } else {
-                  const icon = L.divIcon({
-                    className: 'live-ambulance-marker',
-                    html: `
-                      <div style="position:relative; display:flex; align-items:center; justify-content:center; transform:translate(-50%, -50%);">
-                        <div style="position:absolute; width:46px; height:46px; border-radius:50%; background:rgba(16, 185, 129, 0.4); animation:pulse 1.8s infinite;"></div>
-                        <div style="width:34px; height:34px; border-radius:50%; background:#0f172a; border:3px solid #ffffff; box-shadow:0 4px 14px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:15px;">
-                          🚑
-                        </div>
-                      </div>
-                    `,
-                    iconSize: [46, 46],
-                    iconAnchor: [23, 23]
-                  });
-                  markerRef.current = L.marker([gps.lat, gps.lng], { icon }).addTo(mapInstanceRef.current);
-                }
-
-                // Accuracy circle
-                if (accuracyCircleRef.current) {
-                  accuracyCircleRef.current.setLatLng([gps.lat, gps.lng]);
-                  accuracyCircleRef.current.setRadius(Math.max(10, gps.accuracy || 15));
-                } else {
-                  accuracyCircleRef.current = L.circle([gps.lat, gps.lng], {
-                    radius: Math.max(10, gps.accuracy || 15),
-                    color: '#10b981',
-                    fillColor: '#34d399',
-                    fillOpacity: 0.18,
-                    weight: 1.5
-                  }).addTo(mapInstanceRef.current);
-                }
-
-                // Real movement breadcrumbs trail
-                if (pathPolylineRef.current) {
-                  pathHistoryRef.current.push([gps.lat, gps.lng]);
-                  pathPolylineRef.current.setLatLngs(pathHistoryRef.current);
-                } else {
-                  pathHistoryRef.current = [[gps.lat, gps.lng]];
-                  pathPolylineRef.current = L.polyline(pathHistoryRef.current, {
-                    color: '#0f172a',
-                    weight: 4,
-                    opacity: 0.85
-                  }).addTo(mapInstanceRef.current);
-                }
-              }
-            }
+            if (data.transitGps) applyGpsTelemetry(data.transitGps);
           }
         } catch (e) {}
       };
@@ -171,6 +194,22 @@ export default function TransitTrackerCard({ transfer, onUpdate, userRole = 'REQ
     return () => {
       if (es) es.close();
     };
+  }, [transfer.id]);
+
+  // 1D. Bulletproof 1.5-second Polling Fallback (ensures real-time updates even if SSE is blocked/stalled)
+  useEffect(() => {
+    if (!transfer?.id) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/iot/transit-gps/${transfer.id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success && data.transitGps && data.transitGps.lat && data.transitGps.lng) {
+          applyGpsTelemetry(data.transitGps);
+        }
+      } catch (err) {}
+    }, 1500);
+    return () => clearInterval(interval);
   }, [transfer.id]);
 
   // 2. Initialize Street-Level Leaflet Map
