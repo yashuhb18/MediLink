@@ -16,16 +16,14 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem, availabl
     }
   }, [defaultItem, availableItems]);
 
-  if (!isOpen) return null;
-
   // Resolve active item: defaultItem, or item from availableItems matching selectedItemId, or first available
   const activeItem = (availableItems && availableItems.length > 0 && selectedItemId)
     ? (availableItems.find(i => (i.id === selectedItemId || i._id === selectedItemId)) || defaultItem || availableItems[0])
     : (defaultItem || (availableItems && availableItems.length > 0 ? availableItems[0] : null));
 
   // Extract authentic warehouse metadata (strictly read-only)
-  const medicine = activeItem?.medicine || 'Paracetamol 500mg';
-  const batch = activeItem?.batch || 'PA-902';
+  const medicine = activeItem?.medicine || 'Medical Consignment';
+  const batch = activeItem?.batch || 'BATCH-WAREHOUSE-01';
   const rawWeight = activeItem?.currentStockKg !== undefined ? activeItem.currentStockKg : (activeItem?.weightKg ?? 1.0);
   const weightKg = parseFloat(rawWeight).toFixed(2);
   const count = activeItem?.packageCount || activeItem?.count || Math.round(parseFloat(weightKg) * 20);
@@ -43,7 +41,8 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem, availabl
 
   // Automatically register / sync authentic QR code in the IoT database for seamless camera verification
   useEffect(() => {
-    if (isOpen && batch) {
+    if (!isOpen || !batch) return;
+    try {
       fetch(`${API_BASE}/iot/qr-codes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,8 +59,10 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem, availabl
           rawQrData: compactPayload
         })
       }).catch(() => {});
-    }
+    } catch (e) {}
   }, [isOpen, batch, medicine, count, weightKg, dosageUnit, hospitalId, qrId, compactPayload]);
+
+  if (!isOpen) return null;
 
   return (
     <div style={{
