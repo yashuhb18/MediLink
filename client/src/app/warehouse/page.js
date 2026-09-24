@@ -6,7 +6,7 @@ import PortalHeader from '@/components/PortalHeader';
 import HeatmapGrid from '@/components/HeatmapGrid';
 import RegionalLiveMap from '@/components/RegionalLiveMap';
 import ESP32LiveGallery from '@/components/ESP32LiveGallery';
-import { adminApi, inventoryApi, API_BASE } from '@/lib/api';
+import { adminApi, inventoryApi, API_BASE, getCleanItemUnit, getCleanItemForm } from '@/lib/api';
 
 export default function WarehouseProtocolPage() {
   const [user, setUser] = useState(null);
@@ -137,7 +137,11 @@ export default function WarehouseProtocolPage() {
     medicine: batchForm.medicine,
     batch: batchForm.batch,
     count: parseInt(batchForm.packageCount) || 100,
+    dosageUnit: batchForm.dosageUnit || "Strips",
+    dosageForm: batchForm.dosageForm || "Tablets",
+    unit: batchForm.dosageUnit || "Strips",
     hospitalId: batchForm.hospitalId || "H01",
+    timestamp: new Date().toISOString(),
     action: "ADD"
   });
 
@@ -578,10 +582,30 @@ export default function WarehouseProtocolPage() {
                         onChange={e => {
                           const newMed = e.target.value;
                           const pfx = newMed.trim().replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'MED';
+                          const low = newMed.toLowerCase();
+                          let autoForm = null;
+                          let autoUnit = null;
+                          if (low.includes('syr') || low.includes('cough') || low.includes('cug') || low.includes('liquid') || low.includes('suspension') || low.includes('solution') || low.includes('oral')) {
+                            autoForm = 'Syrups';
+                            autoUnit = 'Bottles (100ml)';
+                          } else if (low.includes('inj') || low.includes('vial') || low.includes('vaccine') || low.includes('ampoule') || low.includes('infusion')) {
+                            autoForm = 'Injections';
+                            autoUnit = 'Vials (10ml)';
+                          } else if (low.includes('cream') || low.includes('gel') || low.includes('ointment') || low.includes('tube')) {
+                            autoForm = 'Ointments';
+                            autoUnit = 'Tubes (20g)';
+                          } else if (low.includes('drop') || low.includes('eye') || low.includes('ear')) {
+                            autoForm = 'Syrups';
+                            autoUnit = 'Bottles (100ml)';
+                          } else if (low.includes('powder') || low.includes('ors') || low.includes('sachet')) {
+                            autoForm = 'Bulk Powders';
+                            autoUnit = 'kg';
+                          }
                           setBatchForm(prev => ({
                             ...prev,
                             medicine: newMed,
-                            batch: prev.batch.startsWith('BATCH-') ? `BATCH-${pfx}-${prev.batch.split('-')[2] || Math.floor(Math.random() * 900 + 100)}` : prev.batch
+                            batch: prev.batch.startsWith('BATCH-') ? `BATCH-${pfx}-${prev.batch.split('-')[2] || Math.floor(Math.random() * 900 + 100)}` : prev.batch,
+                            ...(autoForm ? { dosageForm: autoForm, dosageUnit: autoUnit } : {})
                           }));
                         }}
                         required
@@ -861,6 +885,12 @@ export default function WarehouseProtocolPage() {
                         <div><strong>GROSS WT:</strong> {batchForm.weightKg} kg</div>
                         <div><strong>EXPIRY:</strong> {batchForm.expiryDate}</div>
                         <div><strong>TEMP SPEC:</strong> {batchForm.coldChain.split(' ')[0]}</div>
+                      </div>
+                      <div style={{ gridColumn: 'span 2', borderTop: '1px dashed #cbd5e1', paddingTop: '6px', marginTop: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#64748b' }}><strong>DISPATCH TIMESTAMP:</strong></span>
+                        <span style={{ fontSize: '0.76rem', color: '#008b8b', fontWeight: 800 }}>
+                          {new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                        </span>
                       </div>
                     </div>
 
@@ -1198,7 +1228,7 @@ export default function WarehouseProtocolPage() {
                                     </td>
                                     <td>
                                       <div style={{ fontWeight: 800, color: isLow ? '#ef4444' : '#008b8b', fontSize: '0.92rem' }}>
-                                        {item.packageCount || Math.round(item.currentStockKg * 20)} {item.dosageUnit || 'Strips'}
+                                        {item.packageCount || Math.round(item.currentStockKg * 20)} {getCleanItemUnit(item)}
                                       </div>
                                       <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'var(--font-mono)' }}>
                                         {parseFloat(item.currentStockKg).toFixed(2)} kg gross
@@ -1206,7 +1236,7 @@ export default function WarehouseProtocolPage() {
                                     </td>
                                     <td>
                                       <span style={{ fontSize: '0.82rem', color: '#475569' }}>
-                                        {item.dosageForm || 'Tablets'}
+                                        {getCleanItemForm(item)}
                                       </span>
                                     </td>
                                     <td style={{ fontSize: '0.82rem', color: '#64748b' }}>

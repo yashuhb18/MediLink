@@ -136,6 +136,9 @@ async function decodeQRFromBuffer(imageBuffer) {
           parsedPayload.weightKg = parsedPayload.weightKg !== undefined ? parseFloat(parsedPayload.weightKg) : (parsedPayload.w !== undefined ? parseFloat(parsedPayload.w) : 1.0);
           parsedPayload.action = (parsedPayload.action || parsedPayload.act || parsedPayload.a || 'ADD').toUpperCase();
           parsedPayload.destHospital = parsedPayload.destHospital || parsedPayload.hospital || parsedPayload.h || null;
+          parsedPayload.dosageUnit = parsedPayload.dosageUnit || parsedPayload.unit || parsedPayload.u || null;
+          parsedPayload.dosageForm = parsedPayload.dosageForm || parsedPayload.form || parsedPayload.f || null;
+          parsedPayload.timestamp = parsedPayload.timestamp || parsedPayload.time || parsedPayload.t || null;
           parsedPayload.qrId = parsedPayload.qrId || (parsedPayload.batch ? `QR-${parsedPayload.batch}` : null);
         } else if (raw.startsWith('ML:') || raw.startsWith('MED:')) {
           // Dynamic token parsing: ML:ACTION:HOSPITAL:MEDICINE:BATCH:COUNT:WEIGHT

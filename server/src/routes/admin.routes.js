@@ -139,8 +139,12 @@ router.post('/create-batch', async (req, res) => {
         medicine,
         batch,
         count: parseInt(packageCount) || 100,
+        dosageUnit: newItem.dosageUnit || dosageUnit,
+        unit: newItem.dosageUnit || dosageUnit,
+        dosageForm: newItem.dosageForm || dosageForm,
         weightKg: parseFloat(weightKg) || 1.0,
-        destHospital: hospitalId || "H01"
+        destHospital: hospitalId || "H01",
+        timestamp: new Date().toISOString()
       })
     }).catch(e => console.warn('[Admin] QRCode registration warning:', e.message));
 

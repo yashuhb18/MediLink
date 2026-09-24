@@ -155,12 +155,33 @@ function initWeightHistory() {
 }
 initWeightHistory();
 
-// Helper to convert Mongoose doc to plain object without _id & __v
+// Helper to convert Mongoose doc to plain object without _id & __v with unit normalization
 function toPlain(doc) {
   if (!doc) return null;
-  const obj = doc.toObject ? doc.toObject() : doc;
+  const obj = doc.toObject ? doc.toObject() : { ...doc };
   delete obj._id;
   delete obj.__v;
+  if (obj.medicine) {
+    const medLower = obj.medicine.toLowerCase();
+    if (!obj.dosageUnit || obj.dosageUnit === 'Strips' || obj.dosageUnit === 'Units') {
+      if (medLower.includes('syr') || medLower.includes('cough') || medLower.includes('cug') || medLower.includes('liquid') || medLower.includes('suspension') || medLower.includes('solution') || medLower.includes('oral')) {
+        obj.dosageUnit = 'Bottles';
+        if (!obj.dosageForm || obj.dosageForm === 'Tablets') obj.dosageForm = 'Syrups';
+      } else if (medLower.includes('inj') || medLower.includes('vial') || medLower.includes('vaccine') || medLower.includes('ampoule') || medLower.includes('infusion')) {
+        obj.dosageUnit = 'Vials';
+        if (!obj.dosageForm || obj.dosageForm === 'Tablets') obj.dosageForm = 'Injections';
+      } else if (medLower.includes('cream') || medLower.includes('gel') || medLower.includes('ointment') || medLower.includes('tube')) {
+        obj.dosageUnit = 'Tubes';
+        if (!obj.dosageForm || obj.dosageForm === 'Tablets') obj.dosageForm = 'Ointments';
+      } else if (medLower.includes('drop') || medLower.includes('eye') || medLower.includes('ear')) {
+        obj.dosageUnit = 'Bottles';
+        if (!obj.dosageForm || obj.dosageForm === 'Tablets') obj.dosageForm = 'Syrups';
+      } else if (medLower.includes('powder') || medLower.includes('ors') || medLower.includes('sachet')) {
+        obj.dosageUnit = 'Sachets';
+        if (!obj.dosageForm || obj.dosageForm === 'Tablets') obj.dosageForm = 'Bulk Powders';
+      }
+    }
+  }
   return obj;
 }
 
@@ -316,7 +337,29 @@ const db = {
 
   async createInventoryItem(data) {
     const pkgCount = data.packageCount !== undefined ? parseInt(data.packageCount) : Math.round((parseFloat(data.currentStockKg) || 1.0) * 20);
-    const dUnit = data.dosageUnit || 'Strips';
+    let dUnit = data.dosageUnit;
+    let dForm = data.dosageForm || 'Tablets';
+    const m = (data.medicine || '').toLowerCase();
+    if (!dUnit || dUnit === 'Strips' || dUnit === 'Units') {
+      if (m.includes('syr') || m.includes('cough') || m.includes('cug') || m.includes('liquid') || m.includes('suspension') || m.includes('solution') || m.includes('oral')) {
+        dUnit = 'Bottles';
+        dForm = 'Syrups';
+      } else if (m.includes('inj') || m.includes('vial') || m.includes('vaccine') || m.includes('ampoule') || m.includes('infusion')) {
+        dUnit = 'Vials';
+        dForm = 'Injections';
+      } else if (m.includes('cream') || m.includes('gel') || m.includes('ointment') || m.includes('tube')) {
+        dUnit = 'Tubes';
+        dForm = 'Ointments';
+      } else if (m.includes('drop') || m.includes('eye') || m.includes('ear')) {
+        dUnit = 'Bottles';
+        dForm = 'Syrups';
+      } else if (m.includes('powder') || m.includes('ors') || m.includes('sachet')) {
+        dUnit = 'Sachets';
+        dForm = 'Bulk Powders';
+      } else {
+        dUnit = dUnit || 'Strips';
+      }
+    }
     const newItem = {
       id: data.id || `INV-${Date.now()}-${Math.floor(Math.random()*1000)}`,
       hospitalId: data.hospitalId || 'H01',
@@ -325,7 +368,7 @@ const db = {
       minThresholdKg: parseFloat(data.minThresholdKg) || 1.0,
       consumptionRatePerHour: data.consumptionRatePerHour || 0.05,
       batch: data.batch || 'BATCH-01',
-      dosageForm: data.dosageForm || 'Tablets',
+      dosageForm: dForm,
       dosageUnit: dUnit,
       packageCount: pkgCount,
       unitDescription: data.unitDescription || `${pkgCount} ${dUnit}`,

@@ -108,4 +108,47 @@ export const cameraApi = {
   executeAction: (data) => apiFetch('/iot/execute-action', { method: 'POST', body: JSON.stringify(data) })
 };
 
+export function getCleanItemUnit(item) {
+  if (!item) return 'Strips';
+  const unit = item.dosageUnit;
+  if (unit && unit !== 'Strips' && unit !== 'Units') return unit;
+  const m = (item.medicine || '').toLowerCase();
+  if (m.includes('syr') || m.includes('cough') || m.includes('cug') || m.includes('liquid') || m.includes('suspension') || m.includes('solution') || m.includes('oral')) {
+    return 'Bottles';
+  }
+  if (m.includes('inj') || m.includes('vial') || m.includes('vaccine') || m.includes('ampoule') || m.includes('infusion')) {
+    return 'Vials';
+  }
+  if (m.includes('cream') || m.includes('gel') || m.includes('ointment') || m.includes('tube')) {
+    return 'Tubes';
+  }
+  if (m.includes('drop') || m.includes('eye') || m.includes('ear')) {
+    return 'Dropper Bottles';
+  }
+  if (m.includes('powder') || m.includes('ors') || m.includes('sachet')) {
+    return 'Sachets';
+  }
+  return unit || 'Strips';
+}
+
+export function getCleanItemForm(item) {
+  if (!item) return 'Tablets';
+  const form = item.dosageForm;
+  if (form && form !== 'Tablets') return form;
+  const m = (item.medicine || '').toLowerCase();
+  if (m.includes('syr') || m.includes('cough') || m.includes('cug') || m.includes('liquid') || m.includes('suspension')) {
+    return 'Syrups';
+  }
+  if (m.includes('inj') || m.includes('vial') || m.includes('vaccine') || m.includes('infusion')) {
+    return 'Injections';
+  }
+  if (m.includes('cream') || m.includes('gel') || m.includes('ointment')) {
+    return 'Ointments';
+  }
+  if (m.includes('powder') || m.includes('ors')) {
+    return 'Bulk Powders';
+  }
+  return form || 'Tablets';
+}
+
 

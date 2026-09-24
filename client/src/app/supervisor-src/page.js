@@ -8,7 +8,7 @@ import TransitTrackerCard from '@/components/TransitTrackerCard';
 import ProximityIndiaMap from '@/components/ProximityIndiaMap';
 import KarmaGauge from '@/components/KarmaGauge';
 import { QRCodeSVG } from 'qrcode.react';
-import { inventoryApi, transferApi, karmaApi, aiApi, API_BASE } from '@/lib/api';
+import { inventoryApi, transferApi, karmaApi, aiApi, API_BASE, getCleanItemUnit } from '@/lib/api';
 
 export default function UnifiedSourceSupervisorPortal() {
   const [user, setUser] = useState(null);
@@ -402,7 +402,7 @@ export default function UnifiedSourceSupervisorPortal() {
                     🚨 HIGH URGENCY INCOMING EMERGENCY SOURCING REQUEST
                   </div>
                   <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#991b1b', marginTop: '2px' }}>
-                    {urgentIncomingPending[0].requestingHospitalId} requested {urgentIncomingPending[0].packageCount || (urgentIncomingPending[0].quantityKg * 20)} {urgentIncomingPending[0].dosageUnit || 'Strips'} of {urgentIncomingPending[0].medicine}!
+                    {urgentIncomingPending[0].requestingHospitalId} requested {urgentIncomingPending[0].packageCount || (urgentIncomingPending[0].quantityKg * 20)} {getCleanItemUnit(urgentIncomingPending[0])} of {urgentIncomingPending[0].medicine}!
                   </div>
                   <div style={{ fontSize: '0.8rem', color: '#7f1d1d', marginTop: '2px' }}>
                     {urgentIncomingPending[0].driverMode === 'SENDER_DRIVER_REQUIRED'
@@ -545,7 +545,7 @@ export default function UnifiedSourceSupervisorPortal() {
                     <tbody>
                       {inventoryList.map(item => {
                         const isLow = item.currentStockKg < (item.minThresholdKg || 1.0);
-                        const unitLabel = item.dosageUnit || 'Strips';
+                        const unitLabel = getCleanItemUnit(item);
                         const count = item.packageCount || Math.round(item.currentStockKg * 20);
 
                         return (
@@ -934,7 +934,7 @@ export default function UnifiedSourceSupervisorPortal() {
                   {incomingRequests.filter(r => r.status === 'PENDING_SOURCE').map(req => {
                     const isHigh = req.urgency === 'HIGH';
                     const unitCount = req.packageCount || (req.quantityKg * 20);
-                    const unitLabel = req.dosageUnit || 'Strips';
+                    const unitLabel = getCleanItemUnit(req);
 
                     return (
                       <div key={req.id} className={`priority-item ${isHigh ? 'urgency-high' : 'urgency-medium'}`} style={{ padding: '20px 24px' }}>
@@ -1120,7 +1120,7 @@ export default function UnifiedSourceSupervisorPortal() {
                           <td>
                             <strong>{req.medicine}</strong>
                             <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                              {req.packageCount || (req.quantityKg * 20)} {req.dosageUnit || 'Strips'} ({req.quantityKg} kg)
+                              {req.packageCount || (req.quantityKg * 20)} {getCleanItemUnit(req)} ({req.quantityKg} kg)
                             </div>
                           </td>
                           <td><span className={`badge ${req.urgency === 'HIGH' ? 'badge-danger' : 'badge-warning'}`}>{req.urgency}</span></td>
@@ -1169,7 +1169,7 @@ export default function UnifiedSourceSupervisorPortal() {
             </div>
 
             <p style={{ fontSize: '0.84rem', color: '#475569', marginBottom: '18px' }}>
-              Requesting hospital <strong>{assigningReq.requestingHospitalId}</strong> has requested emergency consignment dispatch for <strong>{assigningReq.packageCount || (assigningReq.quantityKg * 20)} {assigningReq.dosageUnit || 'Strips'} of {assigningReq.medicine}</strong>.
+              Requesting hospital <strong>{assigningReq.requestingHospitalId}</strong> has requested emergency consignment dispatch for <strong>{assigningReq.packageCount || (assigningReq.quantityKg * 20)} {getCleanItemUnit(assigningReq)} of {assigningReq.medicine}</strong>.
             </p>
 
             <form onSubmit={handleAssignDriverSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>

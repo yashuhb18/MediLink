@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { API_BASE } from '../lib/api';
+import { API_BASE, getCleanItemUnit, getCleanItemForm } from '../lib/api';
 
 export default function SmartLabelModal({ isOpen, onClose, defaultItem, availableItems = [] }) {
   // If multiple items exist in the node inventory and no single item was passed, or user wants to switch items
@@ -21,14 +21,14 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem, availabl
     ? (availableItems.find(i => (i.id === selectedItemId || i._id === selectedItemId)) || defaultItem || availableItems[0])
     : (defaultItem || (availableItems && availableItems.length > 0 ? availableItems[0] : null));
 
-  // Extract authentic warehouse metadata (strictly read-only)
+  // Extract authentic warehouse metadata (strictly read-only) with intelligent unit & form detection
   const medicine = activeItem?.medicine || 'Medical Consignment';
   const batch = activeItem?.batch || 'BATCH-WAREHOUSE-01';
   const rawWeight = activeItem?.currentStockKg !== undefined ? activeItem.currentStockKg : (activeItem?.weightKg ?? 1.0);
   const weightKg = parseFloat(rawWeight).toFixed(2);
+  const dosageUnit = getCleanItemUnit(activeItem);
+  const dosageForm = getCleanItemForm(activeItem);
   const count = activeItem?.packageCount || activeItem?.count || Math.round(parseFloat(weightKg) * 20);
-  const dosageUnit = activeItem?.dosageUnit || 'Strips';
-  const dosageForm = activeItem?.dosageForm || 'Tablets';
   const shelfPosition = activeItem?.shelfPosition || 'Storage Bay 1';
   const boxId = activeItem?.boxId || (activeItem?.batch ? `BOX-${activeItem.batch}` : 'BOX-WH-01');
   const rfidUid = activeItem?.rfidUid || activeItem?.targetRfidUid || 'TAG-RFID-01';
@@ -36,8 +36,24 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem, availabl
   const hospitalId = activeItem?.hospitalId || activeItem?.requestingHospitalId || activeItem?.sourceHospitalId || 'H01';
   const qrId = activeItem?.qrId || (activeItem?.batch ? `QR-${activeItem.batch}` : `QR-${activeItem?.id || Date.now()}`);
 
+  // Format authentic dispatch timestamp
+  const timestamp = activeItem?.createdAt
+    ? new Date(activeItem.createdAt).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+      })
+    : (activeItem?.lastSyncTime
+        ? new Date(activeItem.lastSyncTime).toLocaleString('en-IN', {
+            day: '2-digit', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+          })
+        : new Date().toLocaleString('en-IN', {
+            day: '2-digit', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+          }));
+
   // Ultra-compact standardized token for ESP32-CAM and phone scanners
-  const compactPayload = `ML:VERIFIED:${activeItem?.id || batch}:${batch}:${weightKg}:${medicine}:${count}:${rfidUid}:${hospitalId}`;
+  const compactPayload = `ML:VERIFIED:${activeItem?.id || batch}:${batch}:${weightKg}:${medicine}:${count}:${dosageUnit}:${rfidUid}:${hospitalId}`;
 
   // Automatically register / sync authentic QR code in the IoT database for seamless camera verification
   useEffect(() => {
@@ -174,7 +190,7 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem, availabl
               >
                 {availableItems.map(item => (
                   <option key={item.id || item._id} value={item.id || item._id}>
-                    {item.medicine} — Batch {item.batch} ({item.packageCount || (item.currentStockKg * 20)} {item.dosageUnit || 'Strips'})
+                    {item.medicine} — Batch {item.batch} ({item.packageCount || (item.currentStockKg * 20)} {getCleanItemUnit(item)})
                   </option>
                 ))}
               </select>
@@ -294,6 +310,16 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem, availabl
                 {expiryDate}
               </div>
             </div>
+
+            <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff', padding: '10px 14px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                <i className="fa-regular fa-clock" style={{ color: '#008b8b' }}></i>
+                <span>Warehouse Dispatch Timestamp:</span>
+              </div>
+              <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-mono)' }}>
+                {timestamp}
+              </div>
+            </div>
           </div>
 
           {/* High-Contrast Printable Optical QR Card */}
@@ -351,6 +377,9 @@ export default function SmartLabelModal({ isOpen, onClose, defaultItem, availabl
               </div>
               <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                 RFID: {rfidUid} · EXP: {expiryDate}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#008b8b', fontFamily: 'var(--font-mono)', marginTop: '3px', fontWeight: 800 }}>
+                TIMESTAMP: {timestamp}
               </div>
 
               <div style={{
