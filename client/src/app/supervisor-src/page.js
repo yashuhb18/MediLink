@@ -514,9 +514,9 @@ export default function UnifiedSourceSupervisorPortal() {
                   <button
                     className="btn btn-ghost btn-sm"
                     style={{ borderColor: '#008b8b', color: '#008b8b', fontWeight: 700 }}
-                    onClick={() => { setLabelItem(null); setSmartLabelOpen(true); }}
+                    onClick={() => { setLabelItem(inventoryList.length > 0 ? inventoryList[0] : null); setSmartLabelOpen(true); }}
                   >
-                    <i className="fa-solid fa-qrcode"></i> Generate Smart Label
+                    <i className="fa-solid fa-qrcode"></i> View Consignment Label
                   </button>
                   <button className="btn btn-ghost btn-sm" onClick={() => loadData(user.hospitalId)}>
                     <i className="fa-solid fa-rotate"></i> Refresh
@@ -1354,6 +1354,7 @@ export default function UnifiedSourceSupervisorPortal() {
         isOpen={smartLabelOpen}
         onClose={() => setSmartLabelOpen(false)}
         defaultItem={labelItem}
+        availableItems={inventoryList}
       />
     </div>
   );

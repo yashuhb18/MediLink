@@ -5,7 +5,7 @@ import PortalHeader from '@/components/PortalHeader';
 import TrafficLight from '@/components/TrafficLight';
 import IoTSimulator from '@/components/IoTSimulator';
 import SmartLabelModal from '@/components/SmartLabelModal';
-import { transferApi } from '@/lib/api';
+import { transferApi, API_BASE } from '@/lib/api';
 
 export default function PharmacistPortal() {
   const [user, setUser] = useState(null);
